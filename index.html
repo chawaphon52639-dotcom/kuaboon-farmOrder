@@ -913,7 +913,7 @@
                         </div>
                     </header>
 
-                    {}
+                    {/* Notification Toast Modal */}
                     {toastModal.show && (
                         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
                             <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl border text-center">
@@ -937,9 +937,8 @@
                         </div>
                     )}
 
-                    {/* Main Content Area */}
+                    {}
                     <main className="max-w-6xl mx-auto px-4 pt-4">
-                        {}
                         {view === 'store' && (
                             <div className="space-y-6">
                                 {/* Top Banner */}
@@ -956,7 +955,7 @@
                                     <div className="absolute -right-6 -bottom-10 opacity-20 text-9xl">🥗</div>
                                 </div>
 
-                                {/* Customer Tier Picker */}
+                                {/* Customer Tier Picker with high-contrast active green tabs */}
                                 <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
                                     <div>
                                         <h3 className="font-extrabold text-slate-900 text-sm">👤 เลือกระดับประเภทลูกค้า:</h3>
@@ -988,7 +987,7 @@
                                     </div>
                                 </div>
 
-                                {}
+                                {/* Category Tabs */}
                                 <div className="flex border-b border-slate-200 gap-2 overflow-x-auto hide-scrollbar">
                                     <button 
                                         onClick={() => setSelectedCategory('all')}
@@ -1103,7 +1102,7 @@
                             </div>
                         )}
 
-                        {}
+                        {/* Cart Floating Button & Cart Drawer */}
                         {cart.length > 0 && view === 'store' && (
                             <div className="fixed bottom-16 sm:bottom-6 right-4 left-4 max-w-md mx-auto z-30">
                                 <button 
@@ -1207,7 +1206,7 @@
                                                 />
                                             </div>
 
-                                            {}
+                                            {/* Payment Options */}
                                             <div className="pt-2 border-t space-y-3">
                                                 <h4 className="font-extrabold text-slate-900 text-sm">💳 การชำระเงิน</h4>
                                                 
@@ -1249,7 +1248,7 @@
                                                                 type="file" 
                                                                 accept="image/*"
                                                                 onChange={(e) => {
-                                                                    const file = e.target.files[0];
+                                                                    const file = e.target.files && e.target.files[0];
                                                                     if (file) {
                                                                         setSlipFile(file);
                                                                         const reader = new FileReader();
@@ -1276,7 +1275,7 @@
                                         </form>
                                     </div>
 
-                                    {/* Submit Button */}
+                                    {/* Submit Order Button */}
                                     <div className="pt-3 border-t">
                                         <button 
                                             type="submit" 
@@ -1335,7 +1334,50 @@
                                             <div className="text-xs space-y-1">
                                                 <p><strong>ผู้สั่ง:</strong> คุณ {order.customerName} ({order.phone})</p>
                                                 <p><strong>รายการ:</strong> {order.items.map(i => `${i.name} x${i.qty} ${i.unit}`).join(', ')}</p>
-                                                <p className="font-extrabold text-farm-800">ยอดรวม: ฿{order.total}</p>
+                                                <p className="font-extrabold text-farm-800">ยอดรวม: ฿{order.total} ({order.isCredit ? 'เครดิตร้านค้า' : 'โอนเงิน/PromptPay'})</p>
+                                            </div>
+
+                                            {/* Document buttons & Electronic Delivery Note alert */}
+                                            <div className="pt-3 border-t space-y-2">
+                                                {/* Notice banner for credit customers when completed */}
+                                                {order.isCredit && order.status === 'completed' && (
+                                                    <div className="bg-emerald-50 border border-emerald-300 p-3 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-2">
+                                                        <div className="flex items-center gap-2 text-emerald-900 text-xs font-bold">
+                                                            <span className="text-base">📩</span>
+                                                            <span>รายการจัดส่งสำเร็จแล้ว! ท่านสามารถกดรับใบส่งของอิเล็กทรอนิกส์ได้ที่นี่</span>
+                                                        </div>
+                                                        <button 
+                                                            onClick={() => setSelectedOrderDetails({ ...order, forceDocType: 'delivery' })}
+                                                            className="w-full sm:w-auto px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold rounded-xl text-xs shadow transition-all whitespace-nowrap"
+                                                        >
+                                                            📄 รับใบส่งของอิเล็กทรอนิกส์
+                                                        </button>
+                                                    </div>
+                                                )}
+
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    {/* Instant Receipt button for paid orders */}
+                                                    {!order.isCredit && (
+                                                        <button 
+                                                            onClick={() => setSelectedOrderDetails({ ...order, forceDocType: 'receipt' })}
+                                                            className="px-3 py-1.5 bg-farm-800 hover:bg-farm-900 text-white font-bold rounded-xl text-xs shadow transition-all flex items-center gap-1"
+                                                        >
+                                                            <span>📄</span>
+                                                            <span>รับใบเสร็จรับเงิน (A4)</span>
+                                                        </button>
+                                                    )}
+
+                                                    {/* Option to view Delivery Note when order is completed */}
+                                                    {order.status === 'completed' && (
+                                                        <button 
+                                                            onClick={() => setSelectedOrderDetails({ ...order, forceDocType: 'delivery' })}
+                                                            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs shadow transition-all flex items-center gap-1"
+                                                        >
+                                                            <span>📦</span>
+                                                            <span>{order.isCredit ? 'ใบส่งสินค้า / ใบแจ้งหนี้' : 'ดูใบส่งสินค้า (A4)'}</span>
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
 
                                             {order.proofImage && (
@@ -1765,7 +1807,7 @@
                                                                     type="file" 
                                                                     accept="image/*"
                                                                     onChange={(e) => {
-                                                                        const file = e.target.files[0];
+                                                                        const file = e.target.files && e.target.files[0];
                                                                         if (file) {
                                                                             setCustomQrFile(file);
                                                                             const reader = new FileReader();
@@ -1901,93 +1943,98 @@
                                     </div>
                                 </div>
 
-                                <div id="printable-area" className="space-y-6 text-slate-800 text-xs">
-                                    <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4">
-                                        <div>
-                                            <h1 className="text-xl font-extrabold text-slate-900">{farmName}</h1>
-                                            <p className="mt-1">{farmAddress}</p>
-                                            <p>โทร: {farmPhone} | เลขประจำตัวผู้เสียภาษี: {taxId}</p>
-                                        </div>
-                                        <div className="text-right">
-                                            <h2 className="text-lg font-black text-slate-900">
-                                                {selectedOrderDetails.isCredit ? 'ใบส่งสินค้า / ใบแจ้งหนี้' : 'ใบเสร็จรับเงิน'}
-                                            </h2>
-                                            <p className="font-mono font-bold mt-1 text-slate-600">{selectedOrderDetails.docNo}</p>
-                                            <p className="text-[11px] text-slate-500">วันที่: {selectedOrderDetails.date}</p>
-                                        </div>
-                                    </div>
+                                {(() => {
+                                    const isReceipt = selectedOrderDetails.forceDocType ? selectedOrderDetails.forceDocType === 'receipt' : !selectedOrderDetails.isCredit;
+                                    return (
+                                        <div id="printable-area" className="space-y-6 text-slate-800 text-xs">
+                                            <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4">
+                                                <div>
+                                                    <h1 className="text-xl font-extrabold text-slate-900">{farmName}</h1>
+                                                    <p className="mt-1">{farmAddress}</p>
+                                                    <p>โทร: {farmPhone} | เลขประจำตัวผู้เสียภาษี: {taxId}</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <h2 className="text-lg font-black text-slate-900">
+                                                        {isReceipt ? 'ใบเสร็จรับเงิน (Receipt)' : 'ใบส่งสินค้า / ใบแจ้งหนี้ (Delivery Note)'}
+                                                    </h2>
+                                                    <p className="font-mono font-bold mt-1 text-slate-600">{selectedOrderDetails.docNo}</p>
+                                                    <p className="text-[11px] text-slate-500">วันที่: {selectedOrderDetails.date}</p>
+                                                </div>
+                                            </div>
 
-                                    <div className="bg-slate-50 p-3 rounded-xl space-y-1">
-                                        <p><strong>ชื่อลูกค้า / ร้านค้า:</strong> คุณ {selectedOrderDetails.customerName}</p>
-                                        <p><strong>เบอร์โทรศัพท์:</strong> {selectedOrderDetails.phone}</p>
-                                        <p><strong>ที่อยู่จัดส่ง:</strong> {selectedOrderDetails.address}</p>
-                                    </div>
+                                            <div className="bg-slate-50 p-3 rounded-xl space-y-1">
+                                                <p><strong>ชื่อลูกค้า / ร้านค้า:</strong> คุณ {selectedOrderDetails.customerName}</p>
+                                                <p><strong>เบอร์โทรศัพท์:</strong> {selectedOrderDetails.phone}</p>
+                                                <p><strong>ที่อยู่จัดส่ง:</strong> {selectedOrderDetails.address}</p>
+                                            </div>
 
-                                    <table className="w-full text-left border-collapse">
-                                        <thead>
-                                            <tr className="border-b-2 border-slate-300 bg-slate-100">
-                                                <th className="py-2 px-2">ลำดับ</th>
-                                                <th className="py-2 px-2">รายการผักปลอดสาร / สินค้า</th>
-                                                <th className="py-2 px-2 text-center">จำนวน</th>
-                                                <th className="py-2 px-2 text-right">ราคา/หน่วย</th>
-                                                <th className="py-2 px-2 text-right">จำนวนเงิน</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y">
-                                            {selectedOrderDetails.items && selectedOrderDetails.items.map((it, idx) => (
-                                                <tr key={idx}>
-                                                    <td className="py-2 px-2 text-center">{idx + 1}</td>
-                                                    <td className="py-2 px-2 font-bold">{it.name}</td>
-                                                    <td className="py-2 px-2 text-center">{it.qty} {it.unit}</td>
-                                                    <td className="py-2 px-2 text-right">฿{it.price}</td>
-                                                    <td className="py-2 px-2 text-right font-bold">฿{it.price * it.qty}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                        <tfoot>
-                                            <tr className="border-t-2 border-slate-900 font-bold">
-                                                <td colSpan="4" className="py-2 px-2 text-right">ยอดเงินสุทธิ:</td>
-                                                <td className="py-2 px-2 text-right text-base">฿{selectedOrderDetails.total}</td>
-                                            </tr>
-                                        </tfoot>
-                                    </table>
+                                            <table className="w-full text-left border-collapse">
+                                                <thead>
+                                                    <tr className="border-b-2 border-slate-300 bg-slate-100">
+                                                        <th className="py-2 px-2">ลำดับ</th>
+                                                        <th className="py-2 px-2">รายการผักปลอดสาร / สินค้า</th>
+                                                        <th className="py-2 px-2 text-center">จำนวน</th>
+                                                        <th className="py-2 px-2 text-right">ราคา/หน่วย</th>
+                                                        <th className="py-2 px-2 text-right">จำนวนเงิน</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y">
+                                                    {selectedOrderDetails.items && selectedOrderDetails.items.map((it, idx) => (
+                                                        <tr key={idx}>
+                                                            <td className="py-2 px-2 text-center">{idx + 1}</td>
+                                                            <td className="py-2 px-2 font-bold">{it.name}</td>
+                                                            <td className="py-2 px-2 text-center">{it.qty} {it.unit}</td>
+                                                            <td className="py-2 px-2 text-right">฿{it.price}</td>
+                                                            <td className="py-2 px-2 text-right font-bold">฿{it.price * it.qty}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                                <tfoot>
+                                                    <tr className="border-t-2 border-slate-900 font-bold">
+                                                        <td colSpan="4" className="py-2 px-2 text-right">ยอดเงินสุทธิ:</td>
+                                                        <td className="py-2 px-2 text-right text-base">฿{selectedOrderDetails.total}</td>
+                                                    </tr>
+                                                </tfoot>
+                                            </table>
 
-                                    <div className="bg-slate-100 p-2.5 rounded-xl text-center font-bold">
-                                        ({bahtText(selectedOrderDetails.total)})
-                                    </div>
+                                            <div className="bg-slate-100 p-2.5 rounded-xl text-center font-bold">
+                                                ({bahtText(selectedOrderDetails.total)})
+                                            </div>
 
-                                    <div className="grid grid-cols-3 gap-4 pt-10 text-center">
-                                        <div className="space-y-6">
-                                            <div className="border-b border-dashed border-slate-400 w-4/5 mx-auto"></div>
-                                            <p className="text-[11px] font-bold">
-                                                {selectedOrderDetails.isCredit ? 'ผู้รับสินค้า / ลูกค้า' : 'ผู้จ่ายเงิน / ลูกค้า'}
-                                                <br/>
-                                                <span className="text-[10px] text-slate-400 font-normal">วันที่ ...../...../..........</span>
-                                            </p>
+                                            <div className="grid grid-cols-3 gap-4 pt-10 text-center">
+                                                <div className="space-y-6">
+                                                    <div className="border-b border-dashed border-slate-400 w-4/5 mx-auto"></div>
+                                                    <p className="text-[11px] font-bold">
+                                                        {isReceipt ? 'ผู้จ่ายเงิน / ลูกค้า' : 'ผู้รับสินค้า / ลูกค้า'}
+                                                        <br/>
+                                                        <span className="text-[10px] text-slate-400 font-normal">วันที่ ...../...../..........</span>
+                                                    </p>
+                                                </div>
+                                                <div className="space-y-6">
+                                                    <div className="border-b border-dashed border-slate-400 w-4/5 mx-auto"></div>
+                                                    <p className="text-[11px] font-bold">
+                                                        พนักงานจัดส่งสินค้า
+                                                        <br/>
+                                                        <span className="text-[10px] text-slate-400 font-normal">วันที่ ...../...../..........</span>
+                                                    </p>
+                                                </div>
+                                                <div className="space-y-6">
+                                                    <div className="border-b border-dashed border-slate-400 w-4/5 mx-auto"></div>
+                                                    <p className="text-[11px] font-bold">
+                                                        {isReceipt ? 'ผู้รับเงิน / เกื้อบุญฟาร์ม' : 'ผู้ส่งสินค้า / เกื้อบุญฟาร์ม'}
+                                                        <br/>
+                                                        <span className="text-[10px] text-slate-400 font-normal">วันที่ ...../...../..........</span>
+                                                    </p>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div className="space-y-6">
-                                            <div className="border-b border-dashed border-slate-400 w-4/5 mx-auto"></div>
-                                            <p className="text-[11px] font-bold">
-                                                พนักงานจัดส่งสินค้า
-                                                <br/>
-                                                <span className="text-[10px] text-slate-400 font-normal">วันที่ ...../...../..........</span>
-                                            </p>
-                                        </div>
-                                        <div className="space-y-6">
-                                            <div className="border-b border-dashed border-slate-400 w-4/5 mx-auto"></div>
-                                            <p className="text-[11px] font-bold">
-                                                {selectedOrderDetails.isCredit ? 'ผู้ส่งสินค้า / เกื้อบุญฟาร์ม' : 'ผู้รับเงิน / เกื้อบุญฟาร์ม'}
-                                                <br/>
-                                                <span className="text-[10px] text-slate-400 font-normal">วันที่ ...../...../..........</span>
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
+                                    );
+                                })()}
                             </div>
                         </div>
                     )}
 
-                    {}
+                    {/* Mobile Navigation Bar */}
                     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 md:hidden z-20">
                         <div className="grid grid-cols-3 text-center py-2 text-[11px] font-bold">
                             <button onClick={() => setView('store')} className={`space-y-0.5 ${view === 'store' ? 'text-farm-800 font-extrabold' : 'text-slate-400'}`}>
