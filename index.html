@@ -955,6 +955,14 @@
                         </div>
                     </header>
 
+                    {/* LINE In-App Browser Warning Banner */}
+                    {/LINE/i.test(navigator.userAgent) && (
+                        <div className="bg-amber-500 text-slate-900 px-4 py-2 text-xs font-bold text-center border-b border-amber-600 shadow-inner flex items-center justify-center gap-2">
+                            <span className="text-base">📱</span>
+                            <span>กำลังเปิดผ่านแอป LINE: หากต้องการบันทึกบิล PDF กรุณากดปุ่ม <strong>จุด 3 จุด (...)</strong> มุมขวาบนแล้วเลือก <strong>"เปิดใน Chrome/Safari"</strong> ครับ</span>
+                        </div>
+                    )}
+
                     {/* Notification Toast Modal */}
                     {toastModal.show && (
                         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
