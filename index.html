@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>เกื้อบุญฟาร์ม - ผักปลอดสารสดจากแปลง</title>
+    <title>เกื้อบุญฟาร์ม - ผักปลอดสารสดจากแปลง (Firebase Connected)</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- React 18 & ReactDOM UMD -->
@@ -17,6 +17,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <!-- Canvas Confetti -->
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <!-- Firebase SDKs (Compat version for browser single-file script) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
 
     <script>
         tailwind.config = {
@@ -58,7 +63,39 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        // Utility to convert numeric amount to Thai Baht text format
+        // --- 🟢 Firebase Configuration & Initialization ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyDw4qM4mjczsYKjcS-4tij2tJfmxD3GrBU",
+            authDomain: "kuaboon-farmorder.firebaseapp.com",
+            projectId: "kuaboon-farmorder",
+            storageBucket: "kuaboon-farmorder.firebasestorage.app",
+            messagingSenderId: "563219518499",
+            appId: "1:563219518499:web:f249262d6ad4474e158d96",
+            measurementId: "G-D17BQ5L0P6"
+        };
+
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.firestore();
+        const storage = firebase.storage();
+
+        // Helper: Convert DataURL (Base64) to Firebase Cloud Storage URL
+        async function uploadImageToStorage(dataUrl, folderName) {
+            if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl;
+            try {
+                const filename = `${folderName}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+                const ref = storage.ref().child(filename);
+                const snapshot = await ref.putString(dataUrl, 'data_url');
+                const downloadUrl = await snapshot.ref.getDownloadURL();
+                return downloadUrl;
+            } catch (error) {
+                console.error("Storage upload error:", error);
+                return dataUrl; // fallback
+            }
+        }
+
+        // Utility: Convert numeric amount to Thai Baht text format
         function bahtText(num) {
             if (!num || isNaN(num) || num === 0) return 'ศูนย์บาทถ้วน';
             num = Math.round(num * 100) / 100;
@@ -107,70 +144,27 @@
         }
 
         const INITIAL_PRODUCTS = [
-            { id: 1, name: 'กรีนโอ๊ค (Green Oak)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 45, unit: 'กก.', image: 'https://images.unsplash.com/photo-1622206151226-18ca2c9ab4a1?auto=format&fit=crop&w=400&q=80', desc: 'สด กรอบ หวาน ไม่ขม เก็บสดจากแปลงทุกเช้า' },
-            { id: 2, name: 'เรดโอ๊ค (Red Oak)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 30, unit: 'กก.', image: 'https://images.unsplash.com/photo-1556801712-76c8eb07ebb1?auto=format&fit=crop&w=400&q=80', desc: 'ใบสีแดงม่วง สวยงาม ไฟเบอร์สูง เหมาะทำสลัด' },
-            { id: 3, name: 'เบบี้คอส (Baby Cos)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 25, unit: 'กก.', image: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=400&q=80', desc: 'กรอบ แน่น เหมาะสำหรับทำซีซาร์สลัด' },
-            { id: 4, name: 'กรีนคอส (Green Cos)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 20, unit: 'กก.', image: 'https://images.unsplash.com/photo-1515471209610-e3f170587778?auto=format&fit=crop&w=400&q=80', desc: 'ใบกรอบ ทรงสวย รสชาติหวานกรอบธรรมชาติ' },
-            { id: 5, name: 'ฟินเลย์ (Frillice Iceberg)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 15, unit: 'กก.', image: 'https://images.unsplash.com/photo-1508747703725-719777637510?auto=format&fit=crop&w=400&q=80', desc: 'ใบหยิกกรอบมาก ฉ่ำน้ำ ทานง่าย' },
-            { id: 6, name: 'บัตเตอร์เฮด (Butterhead)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 18, unit: 'กก.', image: 'https://images.unsplash.com/photo-1556801712-76c8eb07ebb1?auto=format&fit=crop&w=400&q=80', desc: 'ใบนุ่มละมุน หวานธรรมชาติ ไม่มีความขม' },
-            { id: 7, name: 'ผักเคลสด (Organic Kale)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 12, unit: 'กก.', image: 'https://images.unsplash.com/photo-1524179091875-bf98a9a6ae57?auto=format&fit=crop&w=400&q=80', desc: 'ราชินีแห่งผักใบเขียว คุณประโยชน์สูง วิตามินแน่น' },
-            { id: 8, name: 'ผักสลัดรวม (Mixed Salad)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 50, unit: 'กก.', image: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=400&q=80', desc: 'ผักสลัดรวมมิตร 8 ชนิด สด กรอบ คละพร้อมทาน' },
-            { id: 9, name: 'เคลปั่นปลอดสาร', category: 'drink', priceRetail: 50, priceWholesale: 50, stock: 40, unit: 'ขวด', image: 'https://images.unsplash.com/photo-1610970881699-44a5587cabec?auto=format&fit=crop&w=400&q=80', desc: 'เคลปั่นปลอดสาร น้ำตาล0% สดชื่น มีประโยชน์' }
-        ];
-
-        const INITIAL_ORDERS = [
-            {
-                id: 'ORD-20260723-001',
-                docNo: 'RC-001/23072026/2026',
-                date: '2026-07-23 08:30',
-                customerName: 'ร้านสลัดคุณน้อง',
-                phone: '0891234567',
-                address: '123/4 ถ.สุขาภิบาล อ.เมือง',
-                mapsUrl: 'https://maps.google.com',
-                paymentType: 'promptpay',
-                isCredit: false,
-                items: [
-                    { id: 1, name: 'กรีนโอ๊ค (Green Oak)', qty: 3, price: 100, unit: 'กก.' },
-                    { id: 8, name: 'ผักสลัดรวม (Mixed Salad)', qty: 2, price: 100, unit: 'กก.' }
-                ],
-                subtotal: 500,
-                shippingFee: 0,
-                total: 500,
-                status: 'pending', // 'pending', 'packing', 'shipping', 'completed'
-                slipImage: 'https://placehold.co/400x600/e2e8f0/1e293b?text=Payment+Slip+Proof',
-                proofImage: null
-            },
-            {
-                id: 'ORD-20260723-002',
-                docNo: 'DN-002/23072026/2026',
-                date: '2026-07-23 09:15',
-                customerName: 'ร้านอาหารเกื้อบุญ',
-                phone: '0819876543',
-                address: '88 หมู่ 2 ต.ในเมือง',
-                mapsUrl: '',
-                paymentType: 'credit',
-                isCredit: true,
-                items: [
-                    { id: 7, name: 'ผักเคลสด (Organic Kale)', qty: 5, price: 100, unit: 'กก.' },
-                    { id: 9, name: 'เคลปั่นปลอดสาร', qty: 10, price: 50, unit: 'ขวด' }
-                ],
-                subtotal: 1000,
-                shippingFee: 0,
-                total: 1000,
-                status: 'shipping',
-                slipImage: null,
-                proofImage: 'https://placehold.co/600x400/dcfce7/14532d?text=Delivered+Proof+Photo'
-            }
+            { id: '1', name: 'กรีนโอ๊ค (Green Oak)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 45, unit: 'กก.', image: 'https://images.unsplash.com/photo-1622206151226-18ca2c9ab4a1?auto=format&fit=crop&w=400&q=80', desc: 'ผักปลอดสาร สด กรอบ หวาน ไม่ขม เก็บสดจากแปลงทุกเช้า' },
+            { id: '2', name: 'เรดโอ๊ค (Red Oak)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 30, unit: 'กก.', image: 'https://images.unsplash.com/photo-1556801712-76c8eb07ebb1?auto=format&fit=crop&w=400&q=80', desc: 'ผักปลอดสาร ใบสีแดงม่วง สวยงาม ไฟเบอร์สูง เหมาะทำสลัด' },
+            { id: '3', name: 'เบบี้คอส (Baby Cos)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 25, unit: 'กก.', image: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=400&q=80', desc: 'ผักปลอดสาร กรอบ แน่น เหมาะสำหรับทำซีซาร์สลัด' },
+            { id: '4', name: 'กรีนคอส (Green Cos)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 20, unit: 'กก.', image: 'https://images.unsplash.com/photo-1515471209610-e3f170587778?auto=format&fit=crop&w=400&q=80', desc: 'ผักปลอดสาร ใบกรอบ ทรงสวย รสชาติหวานกรอบธรรมชาติ' },
+            { id: '5', name: 'ฟินเลย์ (Frillice Iceberg)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 15, unit: 'กก.', image: 'https://images.unsplash.com/photo-1508747703725-719777637510?auto=format&fit=crop&w=400&q=80', desc: 'ผักปลอดสาร ใบหยิกกรอบมาก ฉ่ำน้ำ ทานง่าย' },
+            { id: '6', name: 'บัตเตอร์เฮด (Butterhead)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 18, unit: 'กก.', image: 'https://images.unsplash.com/photo-1556801712-76c8eb07ebb1?auto=format&fit=crop&w=400&q=80', desc: 'ผักปลอดสาร ใบนุ่มละมุน หวานธรรมชาติ ไม่มีความขม' },
+            { id: '7', name: 'ผักเคลสด (Organic Kale)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 12, unit: 'กก.', image: 'https://images.unsplash.com/photo-1524179091875-bf98a9a6ae57?auto=format&fit=crop&w=400&q=80', desc: 'ราชินีแห่งผักใบเขียวปลอดสาร คุณประโยชน์สูง วิตามินแน่น' },
+            { id: '8', name: 'ผักสลัดรวม (Mixed Salad)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 50, unit: 'กก.', image: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=400&q=80', desc: 'ผักปลอดสารสลัดรวมมิตร 8 ชนิด สด กรอบ คละพร้อมทาน' },
+            { id: '9', name: 'เคลปั่นปลอดสาร', category: 'drink', priceRetail: 50, priceWholesale: 50, stock: 40, unit: 'ขวด', image: 'https://images.unsplash.com/photo-1610970881699-44a5587cabec?auto=format&fit=crop&w=400&q=80', desc: 'เคลปั่นปลอดสาร สดชื่น น้ำตาล 0% ประโยชน์แน่น' }
         ];
 
         function App() {
-            // App state
-            const [view, setView] = React.useState('store'); // 'store', 'cart', 'tracking', 'backoffice'
-            const [products, setProducts] = React.useState(INITIAL_PRODUCTS);
+            // View & Basic UI State
+            const [view, setView] = React.useState('store'); // 'store', 'tracking', 'backoffice'
+            const [products, setProducts] = React.useState([]);
             const [cart, setCart] = React.useState([]);
-            const [customerType, setCustomerType] = React.useState('retail'); // 'retail', 'wholesale'
+            const [customerType, setCustomerType] = React.useState('retail'); 
             const [selectedCategory, setSelectedCategory] = React.useState('all');
-            const [orders, setOrders] = React.useState(INITIAL_ORDERS);
+            const [orders, setOrders] = React.useState([]);
+            const [isLoading, setIsLoading] = React.useState(true);
+            const [isSubmitting, setIsSubmitting] = React.useState(false);
 
             // Checkout Form State
             const [custName, setCustName] = React.useState('');
@@ -178,10 +172,9 @@
             const [custAddress, setCustAddress] = React.useState('');
             const [custMapsUrl, setCustMapsUrl] = React.useState('');
             const [isCreditOrder, setIsCreditOrder] = React.useState(false);
-            const [slipFile, setSlipFile] = React.useState(null);
             const [slipPreview, setSlipPreview] = React.useState('');
 
-            // Backoffice / Role Management State
+            // Backoffice & Role Management State
             const [adminPin, setAdminPin] = React.useState('');
             const [isAdminLoggedIn, setIsAdminLoggedIn] = React.useState(false);
             const [userRole, setUserRole] = React.useState(null); // 'admin' or 'staff'
@@ -191,7 +184,7 @@
                 { id: 1, name: 'พนักงานแพ็คผัก 1', pin: '1111' },
                 { id: 2, name: 'พนักงานจัดส่ง 2', pin: '2222' }
             ]);
-            const [adminTab, setAdminTab] = React.useState('active'); // 'active', 'completed', 'reports', 'inventory', 'settings', 'wholesale_whitelist'
+            const [adminTab, setAdminTab] = React.useState('active'); 
 
             // Farm Settings State
             const [farmName, setFarmName] = React.useState('เกื้อบุญฟาร์ม (Kuaboon Farm)');
@@ -217,12 +210,70 @@
             const [selectedOrderDetails, setSelectedOrderDetails] = React.useState(null);
             const [showCartDrawer, setShowCartDrawer] = React.useState(false);
 
-            // Calculate total weight of salad veggies in cart
+            // --- 🟢 Firebase Real-time Subscriptions ---
+            React.useEffect(() => {
+                setIsLoading(true);
+
+                // 1. Sync Products
+                const unsubProducts = db.collection('products').onSnapshot(snapshot => {
+                    if (snapshot.empty) {
+                        INITIAL_PRODUCTS.forEach(p => {
+                            db.collection('products').doc(p.id).set(p);
+                        });
+                    } else {
+                        const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        setProducts(items);
+                    }
+                }, err => console.error("Firebase Products Error:", err));
+
+                // 2. Sync Orders
+                const unsubOrders = db.collection('orders').orderBy('createdAt', 'desc').onSnapshot(snapshot => {
+                    const ords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setOrders(ords);
+                    setIsLoading(false);
+                }, err => {
+                    console.error("Firebase Orders Error:", err);
+                    setIsLoading(false);
+                });
+
+                // 3. Sync Settings
+                const unsubSettings = db.collection('settings').doc('farm_config').onSnapshot(doc => {
+                    if (doc.exists) {
+                        const data = doc.data();
+                        if (data.farmName) setFarmName(data.farmName);
+                        if (data.taxId) setTaxId(data.taxId);
+                        if (data.farmAddress) setFarmAddress(data.farmAddress);
+                        if (data.farmPhone) setFarmPhone(data.farmPhone);
+                        if (data.promptpayNo) setPromptpayNo(data.promptpayNo);
+                        if (data.bankAccountNo) setBankAccountNo(data.bankAccountNo);
+                        if (data.customQrImage) setCustomQrImage(data.customQrImage);
+                        if (data.masterAdminPin) setMasterAdminPin(data.masterAdminPin);
+                        if (data.staffList) setStaffList(data.staffList);
+                    }
+                }, err => console.error("Firebase Settings Error:", err));
+
+                // 4. Sync Whitelist
+                const unsubWhitelist = db.collection('whitelist').onSnapshot(snapshot => {
+                    if (!snapshot.empty) {
+                        const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        setWholesaleWhitelist(list);
+                    }
+                }, err => console.error("Firebase Whitelist Error:", err));
+
+                return () => {
+                    unsubProducts();
+                    unsubOrders();
+                    unsubSettings();
+                    unsubWhitelist();
+                };
+            }, []);
+
+            // Total salad weight in cart
             const totalSaladKg = cart
                 .filter(item => item.category === 'salad')
                 .reduce((sum, item) => sum + item.qty, 0);
 
-            // Auto wholesale discount rule: If >= 5kg total salad veggies, upgrade all to wholesale price 100.-
+            // Auto wholesale discount rule: If >= 5kg total salad, upgrade all to wholesale price 100.-
             const isEligibleForWholesalePrice = customerType === 'wholesale' || totalSaladKg >= 5;
 
             // Compute current price for an item
@@ -256,7 +307,7 @@
             };
 
             const cartSubtotal = cart.reduce((sum, item) => sum + (getItemPrice(item) * item.qty), 0);
-            const shippingFee = 0; // Free shipping as per request
+            const shippingFee = 0; // Free shipping
             const cartTotal = cartSubtotal + shippingFee;
 
             // Handle GPS location click
@@ -274,12 +325,12 @@
                 }
             };
 
-            // Checkout Handler
-            const handlePlaceOrder = (e) => {
+            // Checkout Handler with Firebase Sync
+            const handlePlaceOrder = async (e) => {
                 e.preventDefault();
-                if (cart.length === 0) return;
+                if (cart.length === 0 || isSubmitting) return;
 
-                // Check if wholesale / credit is authorized
+                // Check wholesale / credit authorization
                 if (isCreditOrder || customerType === 'wholesale') {
                     const isApproved = wholesaleWhitelist.some(w => w.phone.replace(/[^0-9]/g, '') === custPhone.replace(/[^0-9]/g, ''));
                     if (!isApproved && isCreditOrder) {
@@ -293,48 +344,71 @@
                     return;
                 }
 
-                const newDocNo = `${isCreditOrder ? 'DN' : 'RC'}-${String(orders.length + 1).padStart(3, '0')}/${new Date().toISOString().slice(0,10).replace(/-/g,'')}/${new Date().getFullYear()}`;
+                setIsSubmitting(true);
 
-                const newOrder = {
-                    id: `ORD-${Date.now()}`,
-                    docNo: newDocNo,
-                    date: new Date().toLocaleString('th-TH'),
-                    customerName: custName,
-                    phone: custPhone,
-                    address: custAddress,
-                    mapsUrl: custMapsUrl,
-                    paymentType: isCreditOrder ? 'credit' : 'promptpay',
-                    isCredit: isCreditOrder,
-                    items: cart.map(i => ({ ...i, price: getItemPrice(i) })),
-                    subtotal: cartSubtotal,
-                    shippingFee: shippingFee,
-                    total: cartTotal,
-                    status: 'pending',
-                    slipImage: slipPreview || null,
-                    proofImage: null
-                };
+                try {
+                    // Upload slip image to Firebase Storage if exists
+                    let uploadedSlipUrl = null;
+                    if (slipPreview) {
+                        uploadedSlipUrl = await uploadImageToStorage(slipPreview, 'payment_slips');
+                    }
 
-                // Deduct stock
-                setProducts(products.map(p => {
-                    const cItem = cart.find(ci => ci.id === p.id);
-                    return cItem ? { ...p, stock: Math.max(0, p.stock - cItem.qty) } : p;
-                }));
+                    const newDocNo = `${isCreditOrder ? 'DN' : 'RC'}-${String(orders.length + 1).padStart(3, '0')}/${new Date().toISOString().slice(0,10).replace(/-/g,'')}/${new Date().getFullYear()}`;
+                    const orderId = `ORD-${Date.now()}`;
 
-                setOrders([newOrder, ...orders]);
-                setCart([]);
-                setShowCartDrawer(false);
-                setSlipPreview('');
-                setSlipFile(null);
+                    const newOrder = {
+                        id: orderId,
+                        docNo: newDocNo,
+                        date: new Date().toLocaleString('th-TH'),
+                        customerName: custName,
+                        phone: custPhone,
+                        address: custAddress,
+                        mapsUrl: custMapsUrl,
+                        paymentType: isCreditOrder ? 'credit' : 'promptpay',
+                        isCredit: isCreditOrder,
+                        items: cart.map(i => ({ id: i.id, name: i.name, qty: i.qty, price: getItemPrice(i), unit: i.unit })),
+                        subtotal: cartSubtotal,
+                        shippingFee: shippingFee,
+                        total: cartTotal,
+                        status: 'pending',
+                        slipImage: uploadedSlipUrl,
+                        proofImage: null,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    };
 
-                // Confetti celebration
-                if (window.confetti) {
-                    window.confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+                    // Save order to Firebase Firestore
+                    await db.collection('orders').doc(orderId).set(newOrder);
+
+                    // Deduct stock in Firebase
+                    const batch = db.batch();
+                    cart.forEach(cItem => {
+                        const pRef = db.collection('products').doc(cItem.id);
+                        const currentProd = products.find(p => p.id === cItem.id);
+                        if (currentProd) {
+                            const newStock = Math.max(0, currentProd.stock - cItem.qty);
+                            batch.update(pRef, { stock: newStock });
+                        }
+                    });
+                    await batch.commit();
+
+                    setCart([]);
+                    setShowCartDrawer(false);
+                    setSlipPreview('');
+
+                    if (window.confetti) {
+                        window.confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+                    }
+
+                    setView('tracking');
+                } catch (err) {
+                    console.error("Order error:", err);
+                    alert("เกิดข้อผิดพลาดในการบันทึกออเดอร์ กรุณาลองใหม่อีกครั้ง");
+                } finally {
+                    setIsSubmitting(false);
                 }
-
-                setView('tracking');
             };
 
-            // Backoffice Login Handler (Admin vs Staff)
+            // Backoffice Login
             const handleBackofficeLogin = (e) => {
                 e.preventDefault();
                 if (adminPin === masterAdminPin) {
@@ -348,17 +422,64 @@
                         setUserRole('staff');
                         setActiveStaffName(foundStaff.name);
                         setIsAdminLoggedIn(true);
-                        setAdminTab('active'); // Staff can only see active orders
+                        setAdminTab('active');
                         setAdminPin('');
                     } else {
-                        alert('รหัส PIN ไม่ถูกต้อง (Admin PIN: 1234, รหัสพนักงานทดสอบ: 1111 หรือ 2222)');
+                        alert('รหัส PIN ไม่ถูกต้อง (Admin PIN: 1234 หรือ PIN พนักงานที่ตั้งไว้)');
                     }
                 }
             };
 
-            // Order Status Update
-            const updateOrderStatus = (orderId, newStatus) => {
-                setOrders(orders.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+            // Order Status Update in Firebase
+            const updateOrderStatus = async (orderId, newStatus) => {
+                try {
+                    await db.collection('orders').doc(orderId).update({ status: newStatus });
+                } catch (err) {
+                    console.error("Status update error:", err);
+                }
+            };
+
+            // Upload Proof Image to Firebase
+            const handleUploadProofImage = async (orderId, file) => {
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onloadend = async () => {
+                    try {
+                        const url = await uploadImageToStorage(reader.result, 'delivery_proofs');
+                        await db.collection('orders').doc(orderId).update({ proofImage: url });
+                    } catch (err) {
+                        console.error("Proof upload error:", err);
+                    }
+                };
+                reader.readAsDataURL(file);
+            };
+
+            // Save Farm Settings to Firebase
+            const handleSaveFarmSettings = async (e) => {
+                e.preventDefault();
+                try {
+                    let qrUrl = customQrImage;
+                    if (customQrImage && customQrImage.startsWith('data:')) {
+                        qrUrl = await uploadImageToStorage(customQrImage, 'qr_codes');
+                    }
+
+                    await db.collection('settings').doc('farm_config').set({
+                        farmName,
+                        taxId,
+                        farmAddress,
+                        farmPhone,
+                        promptpayNo,
+                        bankAccountNo,
+                        customQrImage: qrUrl,
+                        masterAdminPin,
+                        staffList
+                    }, { merge: true });
+
+                    setIsSettingsSaved(true);
+                    setTimeout(() => setIsSettingsSaved(false), 3000);
+                } catch (err) {
+                    console.error("Save settings error:", err);
+                }
             };
 
             // Export CSV Report
@@ -392,7 +513,6 @@
                                 </div>
                             </div>
 
-                            {/* Top Action Nav Items */}
                             <div className="flex items-center gap-2">
                                 <button 
                                     onClick={() => setView('tracking')} 
@@ -415,7 +535,7 @@
                                     )}
                                 </button>
 
-                                {/* Secret Backoffice Login Icon Button (User & Wrench symbol) */}
+                                {/* Secret Backoffice Entrance (Person + Wrench) */}
                                 <button 
                                     onClick={() => setView('backoffice')} 
                                     title="ส่วนงานปฏิบัติการ" 
@@ -429,7 +549,12 @@
 
                     {/* Main Container */}
                     <main className="max-w-6xl mx-auto px-4 py-6 flex-1 w-full">
-                        {view === 'store' && (
+                        {isLoading ? (
+                            <div className="text-center py-20 space-y-3">
+                                <div className="inline-block w-8 h-8 border-4 border-farm-800 border-t-transparent rounded-full animate-spin"></div>
+                                <p className="text-slate-500 text-xs font-bold">กำลังเชื่อมต่อฐานข้อมูลคลาวด์ เกื้อบุญฟาร์ม...</p>
+                            </div>
+                        ) : view === 'store' ? (
                             <div className="space-y-6">
                                 {/* Customer Tier & Dynamic Wholesale Banner */}
                                 <div className="bg-gradient-to-r from-farm-800 to-farm-900 text-white p-4 sm:p-5 rounded-3xl shadow-lg space-y-3">
@@ -446,7 +571,6 @@
                                             </p>
                                         </div>
 
-                                        {/* Customer Tier Toggle */}
                                         <div className="bg-white/10 p-1 rounded-2xl flex items-center gap-1 w-full md:w-auto">
                                             <button 
                                                 onClick={() => setCustomerType('retail')} 
@@ -463,7 +587,6 @@
                                         </div>
                                     </div>
 
-                                    {/* Wholesale Progress Alert */}
                                     {customerType === 'retail' && (
                                         <div className="bg-farm-950/50 p-3 rounded-2xl border border-farm-600/30 flex items-center justify-between text-xs">
                                             <div className="flex items-center gap-2">
@@ -576,9 +699,9 @@
                                     })}
                                 </div>
                             </div>
-                        )}
+                        ) : null}
 
-                        {}
+                        {/* Cart Drawer */}
                         {showCartDrawer && (
                             <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex justify-end transition-opacity">
                                 <div className="bg-white w-full max-w-md h-full shadow-2xl flex flex-col justify-between p-5 space-y-4 overflow-y-auto">
@@ -672,7 +795,6 @@
                                                     ></textarea>
                                                 </div>
 
-                                                {/* GPS Location helper */}
                                                 <div className="flex items-center gap-2">
                                                     <input 
                                                         type="url" 
@@ -686,7 +808,7 @@
                                                     </button>
                                                 </div>
 
-                                                {/* Credit order option */}
+                                                {/* Credit Option */}
                                                 <div className="bg-amber-50 p-3 rounded-2xl border border-amber-200 flex items-center justify-between">
                                                     <div>
                                                         <label className="font-bold text-amber-900 cursor-pointer flex items-center gap-2">
@@ -704,17 +826,17 @@
                                                     </div>
                                                 </div>
 
-                                                {/* Payment Slip Upload */}
+                                                {/* Payment QR & Slip Upload */}
                                                 {!isCreditOrder && (
                                                     <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-2 text-center">
                                                         <p className="font-bold text-slate-800 text-xs">📱 ชำระเงินผ่าน PromptPay / ธนาคาร</p>
                                                         {customQrImage ? (
-                                                            <img src={customQrImage} alt="PromptPay QR" className="w-36 h-36 mx-auto rounded-xl shadow border" />
+                                                            <img src={customQrImage} alt="PromptPay QR" className="w-36 h-36 mx-auto rounded-xl shadow border object-cover" />
                                                         ) : (
                                                             <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=PROMPTPAY-${promptpayNo}-${cartTotal}`} alt="QR Code" className="w-36 h-36 mx-auto rounded-xl border p-1 bg-white" />
                                                         )}
                                                         <p className="text-[11px] text-slate-600 font-bold">ยอดโอน: <span className="text-farm-800 font-extrabold">฿{cartTotal}</span></p>
-                                                        <p className="text-[10px] text-slate-400">{bankAccountNo}</p>
+                                                        <p className="text-[10px] text-slate-500 font-medium">{bankAccountNo}</p>
                                                         
                                                         <div className="pt-2">
                                                             <label className="block font-bold text-xs text-slate-700 mb-1">แนบรูปภาพสลิปการโอนเงิน *</label>
@@ -736,8 +858,19 @@
                                                     </div>
                                                 )}
 
-                                                <button type="submit" className="w-full py-3 bg-farm-800 hover:bg-farm-900 text-white font-extrabold text-sm rounded-2xl shadow-lg transition-all">
-                                                    ยืนยันการสั่งซื้อผักสด 🌾
+                                                <button 
+                                                    type="submit" 
+                                                    disabled={isSubmitting}
+                                                    className="w-full py-3 bg-farm-800 hover:bg-farm-900 text-white font-extrabold text-sm rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2"
+                                                >
+                                                    {isSubmitting ? (
+                                                        <>
+                                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                                            <span>กำลังบันทึกออเดอร์ลงคลาวด์...</span>
+                                                        </>
+                                                    ) : (
+                                                        <span>ยืนยันการสั่งซื้อผักสด 🌾</span>
+                                                    )}
                                                 </button>
                                             </form>
                                         </div>
@@ -746,7 +879,7 @@
                             </div>
                         )}
 
-                        {}
+                        {/* Order Tracking View */}
                         {view === 'tracking' && (
                             <div className="max-w-2xl mx-auto bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-sm space-y-5">
                                 <div className="flex items-center justify-between border-b pb-3">
@@ -779,7 +912,7 @@
                                                 </div>
 
                                                 <div className="space-y-1">
-                                                    {order.items.map((it, idx) => (
+                                                    {order.items && order.items.map((it, idx) => (
                                                         <div key={idx} className="flex justify-between text-slate-600">
                                                             <span>• {it.name} x {it.qty} {it.unit}</span>
                                                             <span>฿{it.price * it.qty}</span>
@@ -791,9 +924,8 @@
                                                     </div>
                                                 </div>
 
-                                                {/* Proof Image View */}
                                                 {order.proofImage && (
-                                                    <div className="pt-2">
+                                                    <div className="pt-2 border-t">
                                                         <p className="font-bold text-slate-700 text-[11px] mb-1">📸 รูปถ่ายหลักฐานการจัดส่ง:</p>
                                                         <img src={order.proofImage} alt="Delivery Proof" className="w-full max-h-48 object-cover rounded-xl border" />
                                                     </div>
@@ -805,18 +937,17 @@
                             </div>
                         )}
 
-                        {}
+                        {/* Backoffice View */}
                         {view === 'backoffice' && (
                             <div className="space-y-6">
                                 {!isAdminLoggedIn ? (
-                                    /* PIN Login Form */
                                     <div className="max-w-md mx-auto bg-white p-6 sm:p-8 rounded-3xl shadow-xl border border-slate-200 text-center space-y-4 my-12">
                                         <div className="w-16 h-16 bg-farm-100 text-farm-800 rounded-3xl flex items-center justify-center text-3xl mx-auto">
-                                            🔒
+                                            👤🔧
                                         </div>
                                         <div>
                                             <h2 className="font-extrabold text-slate-900 text-lg">เข้าสู่ส่วนงานปฏิบัติการ</h2>
-                                            <p className="text-slate-500 text-xs mt-1">กรอก PIN ผู้ดูแลระบบ (1234) หรือ PIN พนักงาน (1111, 2222)</p>
+                                            <p className="text-slate-500 text-xs mt-1">กรอก PIN Admin (1234) หรือ PIN พนักงาน (1111, 2222)</p>
                                         </div>
                                         <form onSubmit={handleBackofficeLogin} className="space-y-3">
                                             <input 
@@ -833,9 +964,8 @@
                                         </form>
                                     </div>
                                 ) : (
-                                    /* Logged In Dashboard */
                                     <div className="space-y-6">
-                                        {/* Header & Role Badge */}
+                                        {/* Header Bar */}
                                         <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                                             <div>
                                                 <div className="flex items-center gap-2">
@@ -865,13 +995,12 @@
                                             </div>
                                         </div>
 
-                                        {/* Sub Navigation Tabs (Restricted for Staff) */}
+                                        {/* Navigation Tabs */}
                                         <div className="flex items-center gap-2 overflow-x-auto pb-1 hide-scrollbar">
                                             <button onClick={() => setAdminTab('active')} className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${adminTab === 'active' ? 'bg-farm-900 text-white' : 'bg-white border text-slate-600'}`}>
                                                 📦 งานวันนี้ ({orders.filter(o => o.status !== 'completed').length})
                                             </button>
 
-                                            {/* Admin only tabs */}
                                             {userRole === 'admin' && (
                                                 <>
                                                     <button onClick={() => setAdminTab('completed')} className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${adminTab === 'completed' ? 'bg-farm-900 text-white' : 'bg-white border text-slate-600'}`}>
@@ -893,36 +1022,23 @@
                                             )}
                                         </div>
 
-                                        {}
+                                        {/* Reports Tab */}
                                         {userRole === 'admin' && adminTab === 'reports' ? (
                                             <div className="space-y-6">
                                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                                     <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-1">
-                                                        <span className="text-slate-500 text-xs font-bold">💵 ยอดขายวันนี้ (Daily)</span>
+                                                        <span className="text-slate-500 text-xs font-bold">💵 ยอดขายรวมทั้งหมด (Total Revenue)</span>
                                                         <h3 className="text-2xl font-black text-farm-800">
                                                             ฿{orders.reduce((sum, o) => sum + o.total, 0)}
                                                         </h3>
-                                                        <p className="text-[10px] text-emerald-600 font-bold">ออเดอร์สดประจำวัน</p>
-                                                    </div>
-                                                    <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-1">
-                                                        <span className="text-slate-500 text-xs font-bold">📅 ยอดขายสัปดาห์นี้ (Weekly)</span>
-                                                        <h3 className="text-2xl font-black text-farm-800">
-                                                            ฿{orders.reduce((sum, o) => sum + o.total, 0)}
-                                                        </h3>
-                                                        <p className="text-[10px] text-emerald-600 font-bold">สะสม 7 วันล่าสุด</p>
-                                                    </div>
-                                                    <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-1">
-                                                        <span className="text-slate-500 text-xs font-bold">🗓️ ยอดขายเดือนนี้ (Monthly)</span>
-                                                        <h3 className="text-2xl font-black text-farm-800">
-                                                            ฿{orders.reduce((sum, o) => sum + o.total, 0)}
-                                                        </h3>
-                                                        <p className="text-[10px] text-emerald-600 font-bold">สรุปสะสมประจำเดือน</p>
+                                                        <p className="text-[10px] text-emerald-600 font-bold">ซิงค์จาก Firebase คลาวด์</p>
                                                     </div>
                                                 </div>
                                             </div>
                                         ) : userRole === 'admin' && adminTab === 'inventory' ? (
+                                            /* Inventory Tab */
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
-                                                <h3 className="font-extrabold text-slate-900 text-base border-b pb-3">🥬 จัดการสต็อกคลังผักสด</h3>
+                                                <h3 className="font-extrabold text-slate-900 text-base border-b pb-3">🥬 จัดการสต็อกคลังผักสด (Real-time Firebase)</h3>
                                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                                                     {products.map(p => (
                                                         <div key={p.id} className="p-3 border rounded-2xl flex items-center justify-between text-xs">
@@ -931,10 +1047,16 @@
                                                                 <span className="text-slate-400">คงเหลือ: {p.stock} {p.unit}</span>
                                                             </div>
                                                             <div className="flex items-center gap-1">
-                                                                <button onClick={() => setProducts(products.map(x => x.id === p.id ? { ...x, stock: Math.max(0, x.stock - 5) } : x))} className="px-2 py-1 bg-slate-100 rounded font-bold">
+                                                                <button 
+                                                                    onClick={() => db.collection('products').doc(p.id).update({ stock: Math.max(0, p.stock - 5) })} 
+                                                                    className="px-2 py-1 bg-slate-100 rounded font-bold"
+                                                                >
                                                                     -5
                                                                 </button>
-                                                                <button onClick={() => setProducts(products.map(x => x.id === p.id ? { ...x, stock: x.stock + 5 } : x))} className="px-2 py-1 bg-farm-100 text-farm-800 rounded font-bold">
+                                                                <button 
+                                                                    onClick={() => db.collection('products').doc(p.id).update({ stock: p.stock + 5 })} 
+                                                                    className="px-2 py-1 bg-farm-100 text-farm-800 rounded font-bold"
+                                                                >
                                                                     +5
                                                                 </button>
                                                             </div>
@@ -943,16 +1065,17 @@
                                                 </div>
                                             </div>
                                         ) : userRole === 'admin' && adminTab === 'wholesale_whitelist' ? (
+                                            /* Wholesale Whitelist Tab */
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                                                 <div className="border-b pb-3">
                                                     <h3 className="font-extrabold text-slate-900 text-base">📋 รายชื่อลูกค้าราคาส่ง / เครดิตที่ได้รับอนุมัติ</h3>
                                                     <p className="text-slate-500 text-xs mt-0.5">เบอร์โทรศัพท์ที่บันทึกไว้ตรงนี้ จะได้รับสิทธิ์ราคาส่งและสั่งซื้อแบบเครดิตโดยอัตโนมัติ</p>
                                                 </div>
 
-                                                <form onSubmit={(e) => {
+                                                <form onSubmit={async (e) => {
                                                     e.preventDefault();
                                                     if (!newWholesalePhone || !newWholesaleName) return;
-                                                    setWholesaleWhitelist([...wholesaleWhitelist, { phone: newWholesalePhone, name: newWholesaleName }]);
+                                                    await db.collection('whitelist').doc(newWholesalePhone).set({ phone: newWholesalePhone, name: newWholesaleName });
                                                     setNewWholesalePhone('');
                                                     setNewWholesaleName('');
                                                 }} className="flex flex-col sm:flex-row gap-2 bg-slate-50 p-3 rounded-2xl text-xs">
@@ -979,12 +1102,12 @@
 
                                                 <div className="divide-y divide-slate-100 text-xs">
                                                     {wholesaleWhitelist.map((item, idx) => (
-                                                        <div key={idx} className="py-2.5 flex items-center justify-between">
+                                                        <div key={item.id || idx} className="py-2.5 flex items-center justify-between">
                                                             <div>
                                                                 <span className="font-bold text-slate-900">{item.name}</span>
                                                                 <span className="text-slate-400 ml-2">({item.phone})</span>
                                                             </div>
-                                                            <button onClick={() => setWholesaleWhitelist(wholesaleWhitelist.filter((_, i) => i !== idx))} className="text-red-500 font-bold hover:underline">
+                                                            <button onClick={() => db.collection('whitelist').doc(item.phone).delete()} className="text-red-500 font-bold hover:underline">
                                                                 ลบ
                                                             </button>
                                                         </div>
@@ -992,25 +1115,22 @@
                                                 </div>
                                             </div>
                                         ) : userRole === 'admin' && adminTab === 'settings' ? (
+                                            /* Farm Settings & Staff Management Tab */
                                             <div className="space-y-6">
                                                 <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
                                                     <div className="flex items-center justify-between border-b pb-3">
                                                         <div>
                                                             <h3 className="font-extrabold text-slate-900 text-base">⚙️ ตั้งค่าหัวบิล และ ข้อมูลฟาร์ม</h3>
-                                                            <p className="text-slate-500 text-xs mt-0.5">ข้อมูลนี้จะนำไปแสดงบนหัวเอกสารใบเสร็จรับเงิน A4 และใบส่งสินค้า</p>
+                                                            <p className="text-slate-500 text-xs mt-0.5">ข้อมูลนี้จะถูกบันทึกขึ้นคลาวด์ Firebase นำไปแสดงบนใบเสร็จรับเงิน A4</p>
                                                         </div>
                                                         {isSettingsSaved && (
                                                             <span className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-xs font-bold animate-pulse">
-                                                                ✓ บันทึกสำเร็จแล้ว!
+                                                                ✓ บันทึกขึ้นคลาวด์สำเร็จ!
                                                             </span>
                                                         )}
                                                     </div>
 
-                                                    <form onSubmit={(e) => {
-                                                        e.preventDefault();
-                                                        setIsSettingsSaved(true);
-                                                        setTimeout(() => setIsSettingsSaved(false), 3000);
-                                                    }} className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                                                    <form onSubmit={handleSaveFarmSettings} className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                                                         <div>
                                                             <label className="font-bold text-slate-700 block mb-1">ชื่อฟาร์ม / บริษัท *</label>
                                                             <input type="text" value={farmName} onChange={(e) => setFarmName(e.target.value)} className="w-full p-2 border rounded-xl" />
@@ -1035,10 +1155,40 @@
                                                             <label className="font-bold text-slate-700 block mb-1">รายละเอียดธนาคาร / เลขที่บัญชี</label>
                                                             <input type="text" value={bankAccountNo} onChange={(e) => setBankAccountNo(e.target.value)} className="w-full p-2 border rounded-xl" />
                                                         </div>
-                                                        
+
+                                                        {/* Custom Payment QR Code Upload */}
+                                                        <div className="md:col-span-2 bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-2">
+                                                            <label className="font-bold text-slate-800 block">🖼️ รูปภาพ QR Code ชำระเงินของฟาร์ม (อัปโหลดขึ้น Firebase Storage)</label>
+                                                            <div className="flex flex-col sm:flex-row items-center gap-4">
+                                                                {customQrImage ? (
+                                                                    <img src={customQrImage} alt="Custom QR" className="w-24 h-24 object-cover rounded-xl border bg-white" />
+                                                                ) : (
+                                                                    <div className="w-24 h-24 rounded-xl border border-dashed border-slate-300 flex items-center justify-center text-slate-400 text-xs">
+                                                                        ไม่มีรูป QR
+                                                                    </div>
+                                                                )}
+                                                                <div className="flex-1 space-y-1">
+                                                                    <input 
+                                                                        type="file" 
+                                                                        accept="image/*" 
+                                                                        onChange={(e) => {
+                                                                            const file = e.target.files[0];
+                                                                            if (file) {
+                                                                                const reader = new FileReader();
+                                                                                reader.onloadend = () => setCustomQrImage(reader.result);
+                                                                                reader.readAsDataURL(file);
+                                                                            }
+                                                                        }} 
+                                                                        className="text-xs text-slate-500 file:mr-2 file:py-1 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-farm-100 file:text-farm-800"
+                                                                    />
+                                                                    <p className="text-[10px] text-slate-400">อัปโหลดรูป QR Code พร้อมเพย์จริงเพื่อให้ลูกค้าสแกนชำระเงินได้สะดวก</p>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
                                                         <div className="md:col-span-2 pt-2 border-t flex justify-end">
-                                                            <button type="submit" className="px-6 py-2.5 bg-farm-800 text-white font-bold rounded-2xl shadow">
-                                                                บันทึกข้อมูลฟาร์ม
+                                                            <button type="submit" className="px-6 py-2.5 bg-farm-800 hover:bg-farm-900 text-white font-bold rounded-2xl shadow transition-all">
+                                                                บันทึกข้อมูลฟาร์มขึ้น Firebase
                                                             </button>
                                                         </div>
                                                     </form>
@@ -1067,7 +1217,9 @@
                                                             e.preventDefault();
                                                             if (!newStaffName || !newStaffPin) return;
                                                             if (newStaffPin.length !== 4) { alert('รหัส PIN ต้องมี 4 หลัก'); return; }
-                                                            setStaffList([...staffList, { id: Date.now(), name: newStaffName, pin: newStaffPin }]);
+                                                            const updated = [...staffList, { id: Date.now(), name: newStaffName, pin: newStaffPin }];
+                                                            setStaffList(updated);
+                                                            db.collection('settings').doc('farm_config').set({ staffList: updated }, { merge: true });
                                                             setNewStaffName('');
                                                             setNewStaffPin('');
                                                         }} className="flex flex-col sm:flex-row items-center gap-2 bg-slate-50 p-3 rounded-2xl text-xs">
@@ -1101,9 +1253,13 @@
                                                             <div key={staff.id} className="py-2.5 flex items-center justify-between">
                                                                 <div>
                                                                     <span className="font-bold text-slate-900">{idx + 1}. {staff.name}</span>
-                                                                    <span className="text-slate-400 font-mono ml-2">(PIN: ****)</span>
+                                                                    <span className="text-slate-400 font-mono ml-2">(PIN: {staff.pin})</span>
                                                                 </div>
-                                                                <button onClick={() => setStaffList(staffList.filter(s => s.id !== staff.id))} className="text-red-500 font-bold hover:underline">
+                                                                <button onClick={() => {
+                                                                    const updated = staffList.filter(s => s.id !== staff.id);
+                                                                    setStaffList(updated);
+                                                                    db.collection('settings').doc('farm_config').set({ staffList: updated }, { merge: true });
+                                                                }} className="text-red-500 font-bold hover:underline">
                                                                     ลบ
                                                                 </button>
                                                             </div>
@@ -1112,6 +1268,7 @@
                                                 </div>
                                             </div>
                                         ) : (
+                                            /* Active / Completed Orders List */
                                             <div className="space-y-4">
                                                 {orders.filter(o => adminTab === 'completed' ? o.status === 'completed' : o.status !== 'completed').map(order => (
                                                     <div key={order.id} className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3">
@@ -1130,7 +1287,7 @@
                                                                 <select 
                                                                     value={order.status} 
                                                                     onChange={(e) => updateOrderStatus(order.id, e.target.value)}
-                                                                    className="text-xs p-2 border border-slate-300 rounded-xl font-bold bg-slate-50"
+                                                                    className="text-xs p-2 border border-slate-300 rounded-xl font-bold bg-slate-50 outline-none"
                                                                 >
                                                                     <option value="pending">⏳ ได้รับออเดอร์</option>
                                                                     <option value="packing">🥬 กำลังแพ็คผักสด</option>
@@ -1140,16 +1297,16 @@
 
                                                                 <button 
                                                                     onClick={() => setSelectedOrderDetails(order)} 
-                                                                    className="px-3 py-2 bg-farm-800 text-white text-xs font-bold rounded-xl shadow whitespace-nowrap"
+                                                                    className="px-3 py-2 bg-farm-800 hover:bg-farm-900 text-white text-xs font-bold rounded-xl shadow whitespace-nowrap"
                                                                 >
                                                                     📄 พิมพ์บิล A4
                                                                 </button>
                                                             </div>
                                                         </div>
 
-                                                        {/* Order Item List & Map link */}
+                                                        {/* Items & Address */}
                                                         <div className="text-xs space-y-1">
-                                                            {order.items.map((it, idx) => (
+                                                            {order.items && order.items.map((it, idx) => (
                                                                 <div key={idx} className="flex justify-between text-slate-600">
                                                                     <span>• {it.name} x {it.qty} {it.unit}</span>
                                                                     <span>฿{it.price * it.qty}</span>
@@ -1174,16 +1331,7 @@
                                                                 <input 
                                                                     type="file" 
                                                                     accept="image/*" 
-                                                                    onChange={(e) => {
-                                                                        const file = e.target.files[0];
-                                                                        if (file) {
-                                                                            const reader = new FileReader();
-                                                                            reader.onloadend = () => {
-                                                                                setOrders(orders.map(o => o.id === order.id ? { ...o, proofImage: reader.result } : o));
-                                                                            };
-                                                                            reader.readAsDataURL(file);
-                                                                        }
-                                                                    }}
+                                                                    onChange={(e) => handleUploadProofImage(order.id, e.target.files[0])}
                                                                     className="text-[10px] text-slate-500"
                                                                 />
                                                             </div>
@@ -1203,7 +1351,7 @@
                         )}
                     </main>
 
-                    {}
+                    {/* Modal Print A4 Document */}
                     {selectedOrderDetails && (
                         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
                             <div className="bg-white w-full max-w-3xl rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl my-auto">
@@ -1221,7 +1369,6 @@
 
                                 {/* Printable Area */}
                                 <div id="printable-area" className="space-y-6 text-slate-800 text-xs">
-                                    {/* Bill Header */}
                                     <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4">
                                         <div>
                                             <h1 className="text-xl font-extrabold text-slate-900">{farmName}</h1>
@@ -1237,14 +1384,12 @@
                                         </div>
                                     </div>
 
-                                    {/* Customer Info */}
                                     <div className="bg-slate-50 p-3 rounded-xl space-y-1">
                                         <p><strong>ชื่อลูกค้า / ร้านค้า:</strong> คุณ {selectedOrderDetails.customerName}</p>
                                         <p><strong>เบอร์โทรศัพท์:</strong> {selectedOrderDetails.phone}</p>
                                         <p><strong>ที่อยู่จัดส่ง:</strong> {selectedOrderDetails.address}</p>
                                     </div>
 
-                                    {/* Items Table */}
                                     <table className="w-full text-left border-collapse">
                                         <thead>
                                             <tr className="border-b-2 border-slate-300 bg-slate-100">
@@ -1256,7 +1401,7 @@
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y">
-                                            {selectedOrderDetails.items.map((it, idx) => (
+                                            {selectedOrderDetails.items && selectedOrderDetails.items.map((it, idx) => (
                                                 <tr key={idx}>
                                                     <td className="py-2 px-2 text-center">{idx + 1}</td>
                                                     <td className="py-2 px-2 font-bold">{it.name}</td>
@@ -1274,12 +1419,10 @@
                                         </tfoot>
                                     </table>
 
-                                    {/* Thai Baht Text */}
                                     <div className="bg-slate-100 p-2.5 rounded-xl text-center font-bold">
                                         ({bahtText(selectedOrderDetails.total)})
                                     </div>
 
-                                    {/* Signatures */}
                                     <div className="grid grid-cols-3 gap-4 pt-10 text-center">
                                         <div className="space-y-6">
                                             <div className="border-b border-dashed border-slate-400 w-4/5 mx-auto"></div>
