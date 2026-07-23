@@ -88,7 +88,7 @@
         // Helper for precise float calculations (0.5 kg rounding)
         const roundStep = (num) => Math.round((num + Number.EPSILON) * 10) / 10;
 
-        async function compressImageToBlob(fileOrDataUrl, maxWidth = 500, maxHeight = 500, quality = 0.45) {
+        async function compressImageToBlob(fileOrDataUrl, maxWidth = 800, maxHeight = 800, quality = 0.8) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
                 img.onload = () => {
@@ -103,7 +103,7 @@
                     } else {
                         if (height > maxHeight) {
                             width = Math.round((width * maxHeight) / height);
-                            height = maxHeight;
+                            width = maxHeight;
                         }
                     }
 
@@ -111,6 +111,9 @@
                     canvas.width = width;
                     canvas.height = height;
                     const ctx = canvas.getContext('2d');
+                    
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = 'high';
                     ctx.drawImage(img, 0, 0, width, height);
 
                     const dataUrl = canvas.toDataURL('image/jpeg', quality);
@@ -133,17 +136,21 @@
             });
         }
 
-        async function uploadBlobToStorage(fileOrDataUrl, folderName) {
+        async function uploadBlobToStorage(fileOrDataUrl, folderName, options = {}) {
             if (!fileOrDataUrl) return null;
             if (typeof fileOrDataUrl === 'string' && fileOrDataUrl.startsWith('http')) {
-                return fileOrDataUrl; // Already hosted URL
+                return fileOrDataUrl;
             }
+
+            const maxWidth = options.maxWidth || 800;
+            const maxHeight = options.maxHeight || 800;
+            const quality = options.quality !== undefined ? options.quality : 0.8;
 
             let compressedDataUrl = null;
             let blob = null;
 
             try {
-                const compressed = await compressImageToBlob(fileOrDataUrl, 500, 500, 0.45);
+                const compressed = await compressImageToBlob(fileOrDataUrl, maxWidth, maxHeight, quality);
                 compressedDataUrl = compressed.dataUrl;
                 blob = compressed.blob;
             } catch (err) {
@@ -152,7 +159,6 @@
                 throw err;
             }
 
-            // Try Firebase Storage with 3-second timeout fallback
             try {
                 const filename = `${folderName}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}.jpg`;
                 const ref = storage.ref().child(filename);
@@ -168,7 +174,6 @@
                 return downloadUrl;
             } catch (storageError) {
                 console.warn("Storage upload fallback used inline DataURL:", storageError);
-                // Return ultra-small inline DataURL directly - guaranteed 100% success!
                 return compressedDataUrl;
             }
         }
@@ -277,6 +282,8 @@
                 { id: '1', phone: '0891234567', name: 'ร้านสลัดคุณน้อง' },
                 { id: '2', phone: '0819876543', name: 'ร้านอาหารเกื้อบุญ' }
             ]);
+            const [newWholesaleName, setNewWholesaleName] = React.useState('');
+            const [newWholesalePhone, setNewWholesalePhone] = React.useState('');
             const [newStaffName, setNewStaffName] = React.useState('');
             const [newStaffPin, setNewStaffPin] = React.useState('');
 
@@ -289,7 +296,6 @@
             };
 
             React.useEffect(() => {
-                // 1. Sync & Auto-Ensure 9 Standard Products
                 const unsubProducts = db.collection('products').onSnapshot(async (snapshot) => {
                     setIsFirebaseConnected(true);
                     let items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -318,7 +324,6 @@
                     setProducts(INITIAL_PRODUCTS);
                 });
 
-                // 2. Sync Orders
                 const unsubOrders = db.collection('orders').orderBy('createdAt', 'desc').onSnapshot(snapshot => {
                     setIsFirebaseConnected(true);
                     const ords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -328,7 +333,6 @@
                     setIsFirebaseConnected(false);
                 });
 
-                // 3. Sync Settings
                 const unsubSettings = db.collection('settings').doc('farm_config').onSnapshot(doc => {
                     if (doc.exists) {
                         const data = doc.data();
@@ -341,6 +345,7 @@
                         if (data.customQrImage) setCustomQrImage(data.customQrImage);
                         if (data.masterAdminPin) setMasterAdminPin(data.masterAdminPin);
                         if (data.staffList) setStaffList(data.staffList);
+                        if (data.wholesaleWhitelist) setWholesaleWhitelist(data.wholesaleWhitelist);
                     }
                 }, err => console.warn("Firebase Settings Sync Warning:", err));
 
@@ -351,7 +356,6 @@
                 };
             }, []);
 
-            // Force Sync Standard 9 Products to Firebase
             const handleForceSync9Products = async () => {
                 try {
                     showToast('⚡ กำลังซิงค์ผักครบ 9 รายการ...', 'กำลังส่งข้อมูลผักทั้ง 8 ชนิด + น้ำปั่นเคล เข้าสู่ Firebase...', 'info');
@@ -537,35 +541,55 @@
             const updateOrderStatus = async (orderId, newStatus) => {
                 try {
                     await db.collection('orders').doc(orderId).update({ status: newStatus });
-                    showToast('✅ อัปเดตสถานะสำเร็จ', 'สถานะออเดอร์ถูกบันทึกขึ้นระบบคลาวด์แล้ว', 'success');
+                    showToast('✅ อัปเดตสถานะสำเร็จ', `เปลี่ยนสถานะออเดอร์เป็น "${newStatus}" เรียบร้อยแล้ว`, 'success');
                 } catch (err) {
-                    console.error("Status update error:", err);
+                    console.error("Update order status error:", err);
+                    showToast('❌ อัปเดตไม่สำเร็จ', 'เกิดข้อผิดพลาดในการอัปเดตข้อมูล', 'error');
                 }
             };
 
             const handleUploadProofImage = async (orderId, file) => {
-                if (!file) return;
                 try {
-                    showToast('⚡ กำลังบันทึกรูปจัดส่ง...', 'ย่อภาพและบันทึกเสร็จไวในเสี้ยววินาที...', 'info');
-                    const url = await uploadBlobToStorage(file, 'delivery_proofs');
-                    await db.collection('orders').doc(orderId).update({ proofImage: url });
-                    showToast('📸 บันทึกรูปจัดส่งสำเร็จ', 'อัปโหลดรูปหลักฐานการจัดส่งเรียบร้อยแล้ว', 'success');
+                    showToast('⏳ กำลังอัปโหลดหลักฐาน...', 'กำลังย่อและบันทึกรูปภาพขึ้นคลาวด์...', 'info');
+                    const uploadedUrl = await uploadBlobToStorage(file, 'delivery_proofs');
+                    await db.collection('orders').doc(orderId).update({ proofImage: uploadedUrl });
+                    showToast('📸 แนบหลักฐานสำเร็จ!', 'บันทึกรูปภาพหลักฐานการจัดส่งเรียบร้อยแล้ว', 'success');
                 } catch (err) {
-                    console.error("Proof upload error:", err);
-                    showToast('❌ อัปโหลดไม่สำเร็จ', 'เกิดข้อผิดพลาดในการบันทึกภาพ', 'error');
+                    console.error("Proof image upload error:", err);
+                    showToast('❌ อัปโหลดไม่สำเร็จ', 'ไม่สามารถบันทึกรูปภาพได้', 'error');
                 }
             };
 
-            const handleProductImageUpload = async (productId, file) => {
-                if (!file) return;
+            const handleAddWholesaleCustomer = async (e) => {
+                e.preventDefault();
+                if (!newWholesaleName.trim() || !newWholesalePhone.trim()) return;
+
+                const updatedList = [
+                    ...wholesaleWhitelist,
+                    { id: String(Date.now()), name: newWholesaleName.trim(), phone: newWholesalePhone.trim() }
+                ];
+
+                setWholesaleWhitelist(updatedList);
+                setNewWholesaleName('');
+                setNewWholesalePhone('');
+
                 try {
-                    showToast('⚡ กำลังเปลี่ยนรูปผักสด...', 'ย่อภาพอัตโนมัติ อัปโหลดเสร็จภายในเสี้ยววินาที...', 'info');
-                    const url = await uploadBlobToStorage(file, 'products');
-                    await db.collection('products').doc(productId).update({ image: url });
-                    showToast('🥬 เปลี่ยนรูปผักสดสำเร็จ!', 'รูปภาพผักชนิดนี้ถูกเปลี่ยนและแสดงผลหน้าร้านทันที', 'success');
+                    await db.collection('settings').doc('farm_config').set({ wholesaleWhitelist: updatedList }, { merge: true });
+                    showToast('✅ เพิ่มร้านค้าสำเร็จ', `ลงทะเบียนคุณ/ร้าน ${newWholesaleName} เข้าระบบลูกค้าราคาส่งเรียบร้อยแล้ว`, 'success');
                 } catch (err) {
-                    console.error("Product image upload error:", err);
-                    showToast('❌ เปลี่ยนรูปไม่สำเร็จ', 'เกิดข้อผิดพลาดในการบันทึกภาพ', 'error');
+                    console.error("Save wholesale error:", err);
+                    showToast('❌ บันทึกไม่สำเร็จ', 'เกิดข้อผิดพลาดในการบันทึกข้อมูลลงคลาวด์', 'error');
+                }
+            };
+
+            const handleDeleteWholesaleCustomer = async (id) => {
+                const updatedList = wholesaleWhitelist.filter(w => w.id !== id);
+                setWholesaleWhitelist(updatedList);
+                try {
+                    await db.collection('settings').doc('farm_config').set({ wholesaleWhitelist: updatedList }, { merge: true });
+                    showToast('🗑️ ลบรายชื่อเรียบร้อย', 'ลบร้านค้าออกจากระบบสิทธิ์ราคาส่งแล้ว', 'info');
+                } catch (err) {
+                    console.error("Delete wholesale error:", err);
                 }
             };
 
@@ -575,7 +599,7 @@
                 try {
                     let qrUrl = customQrImage;
                     if (customQrFile || (customQrImage && customQrImage.startsWith('data:'))) {
-                        qrUrl = await uploadBlobToStorage(customQrFile || customQrImage, 'farm_settings');
+                        qrUrl = await uploadBlobToStorage(customQrFile || customQrImage, 'farm_settings', { maxWidth: 1200, maxHeight: 1200, quality: 0.98 });
                     }
 
                     const settingsData = {
@@ -588,11 +612,12 @@
                         customQrImage: qrUrl,
                         masterAdminPin,
                         staffList,
+                        wholesaleWhitelist,
                         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                     };
 
                     await db.collection('settings').doc('farm_config').set(settingsData, { merge: true });
-                    showToast('💾 บันทึกตั้งค่าสำเร็จ', 'ข้อมูลฟาร์มและรูป QR Code อัปเดตขึ้นคลาวด์เรียบร้อยแล้ว', 'success');
+                    showToast('💾 บันทึกตั้งค่าสำเร็จ', 'ข้อมูลฟาร์มและรายชื่อลูกค้าราคาส่งอัปเดตขึ้นคลาวด์เรียบร้อยแล้ว', 'success');
                 } catch (err) {
                     console.error("Save settings error:", err);
                     showToast('❌ บันทึกไม่สำเร็จ', 'กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตหรือสิทธิ์ Firebase Rules', 'error');
@@ -708,6 +733,7 @@
                         </div>
                     )}
 
+                    {}
                     <main className="max-w-6xl mx-auto px-4 pt-4">
                         {view === 'store' && (
                             <div className="space-y-6">
@@ -734,52 +760,43 @@
                                     <div className="flex bg-slate-100 p-1 rounded-2xl w-full sm:w-auto">
                                         <button 
                                             onClick={() => setCustomerType('retail')}
-                                            className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-xs font-bold transition-all ${customerType === 'retail' ? 'bg-white text-farm-800 shadow' : 'text-slate-500'}`}
+                                            className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all ${customerType === 'retail' ? 'bg-white text-slate-900 shadow' : 'text-slate-500 hover:text-slate-900'}`}
                                         >
-                                            ลูกค้าทั่วไป (120.-/กก.)
+                                            ลูกค้าทั่วไป
                                         </button>
                                         <button 
                                             onClick={() => setCustomerType('wholesale')}
-                                            className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-xs font-bold transition-all ${customerType === 'wholesale' ? 'bg-white text-farm-800 shadow' : 'text-slate-500'}`}
+                                            className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all ${customerType === 'wholesale' ? 'bg-farm-800 text-white shadow' : 'text-slate-500 hover:text-slate-900'}`}
                                         >
-                                            ร้านอาหาร / ราคาส่ง (100.-/กก.)
+                                            ร้านค้า/ร้านอาหาร (ราคาส่ง 100.-)
                                         </button>
                                     </div>
                                 </div>
 
-                                {/* Promo Alert Bar */}
-                                {customerType === 'retail' && (
-                                    <div className="bg-amber-50 border border-amber-200 text-amber-900 p-3 rounded-2xl text-xs font-bold flex items-center justify-between">
-                                        <span>💡 สั่งผักรวมกันครบ 5 กก. รับส่วนลดราคาส่ง 100.-/กก. ทันที!</span>
-                                        <span className="text-amber-800 font-extrabold bg-amber-200/60 px-2.5 py-1 rounded-xl">
-                                            ใส่แล้ว: {totalSaladKg} / 5 กก.
-                                        </span>
-                                    </div>
-                                )}
-
-                                {/* Category Filters */}
-                                <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar pb-1">
+                                {/* Category Tabs */}
+                                <div className="flex border-b border-slate-200 gap-2 overflow-x-auto hide-scrollbar">
                                     <button 
                                         onClick={() => setSelectedCategory('all')}
-                                        className={`px-4 py-2 rounded-2xl font-bold text-xs whitespace-nowrap transition-all ${selectedCategory === 'all' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}
+                                        className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${selectedCategory === 'all' ? 'border-farm-800 text-farm-800' : 'border-transparent text-slate-500'}`}
                                     >
-                                        ทั้งหมด ({products.length} รายการ)
+                                        🥗 สินค้าทั้งหมด ({products.length})
                                     </button>
                                     <button 
                                         onClick={() => setSelectedCategory('salad')}
-                                        className={`px-4 py-2 rounded-2xl font-bold text-xs whitespace-nowrap transition-all ${selectedCategory === 'salad' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}
+                                        className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${selectedCategory === 'salad' ? 'border-farm-800 text-farm-800' : 'border-transparent text-slate-500'}`}
                                     >
-                                        🥬 ผักอินทรีย์สด (8 ชนิด)
+                                        🥬 ผักสลัดอินทรีย์สด (8 ชนิด)
                                     </button>
                                     <button 
                                         onClick={() => setSelectedCategory('drink')}
-                                        className={`px-4 py-2 rounded-2xl font-bold text-xs whitespace-nowrap transition-all ${selectedCategory === 'drink' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}
+                                        className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${selectedCategory === 'drink' ? 'border-farm-800 text-farm-800' : 'border-transparent text-slate-500'}`}
                                     >
-                                        🥤 เครื่องดื่มสุขภาพ (น้ำเคลปั่น 300ml)
+                                        🥤 เครื่องดื่มสุขภาพ (1 ชนิด)
                                     </button>
                                 </div>
 
-                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-3 sm:gap-4">
+                                {}
+                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
                                     {products
                                         .filter(p => selectedCategory === 'all' || p.category === selectedCategory)
                                         .map(product => {
@@ -787,14 +804,22 @@
                                             const inCart = cart.find(i => i.id === product.id);
 
                                             return (
-                                                <div key={product.id} className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col justify-between transition-all hover:shadow-md">
+                                                <div key={product.id} className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col justify-between hover:shadow-md transition-all">
                                                     <div>
-                                                        <div className="relative h-36 sm:h-44 bg-slate-100">
+                                                        <div className="relative h-36 sm:h-44 bg-slate-100 overflow-hidden">
                                                             <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
-                                                            <span className={`absolute top-2 right-2 px-2.5 py-1 rounded-full text-[10px] font-extrabold ${product.stock > 0 ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'}`}>
-                                                                {product.stock > 0 ? `พร้อมส่ง ${product.stock} ${product.unit}` : 'สินค้าหมด'}
-                                                            </span>
+                                                            <div className="absolute top-2 left-2 flex flex-col gap-1">
+                                                                <span className="bg-slate-900/80 backdrop-blur-md text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full">
+                                                                    สต็อก {product.stock} {product.unit}
+                                                                </span>
+                                                                {product.category === 'salad' && isEligibleForWholesalePrice && (
+                                                                    <span className="bg-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow">
+                                                                        ⭐ ราคาส่ง 100.-
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                         </div>
+
                                                         <div className="p-3 space-y-1">
                                                             <h4 className="font-extrabold text-slate-900 text-xs sm:text-sm line-clamp-1">{product.name}</h4>
                                                             <p className="text-[11px] text-slate-500 line-clamp-2">{product.desc}</p>
@@ -863,6 +888,7 @@
                             </div>
                         )}
 
+                        {}
                         {cart.length > 0 && view === 'store' && (
                             <div className="fixed bottom-16 sm:bottom-6 right-4 left-4 max-w-md mx-auto z-30">
                                 <button 
@@ -988,18 +1014,22 @@
                                                 </div>
 
                                                 {!isCreditOrder ? (
-                                                    <div className="bg-slate-50 p-4 rounded-2xl text-center space-y-3 border">
-                                                        <p className="font-bold text-slate-800">สแกนชำระเงินยอด ฿{cartTotal}</p>
-                                                        <img 
-                                                            src={customQrImage || `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=PromptPay-${promptpayNo}-${cartTotal}`} 
-                                                            alt="PromptPay QR" 
-                                                            className="w-44 h-44 mx-auto rounded-xl border bg-white p-2 shadow-sm"
-                                                        />
-                                                        <div className="text-[11px] text-slate-500 font-mono">
-                                                            พร้อมเพย์: {promptpayNo} | {bankAccountNo}
+                                                    <div className="bg-slate-50 p-4 rounded-2xl text-center space-y-3 border border-slate-200">
+                                                        <p className="font-extrabold text-slate-900 text-sm">📲 สแกนชำระเงินยอด ฿{cartTotal}</p>
+                                                        <div className="bg-white p-3 rounded-2xl inline-block shadow-md border border-slate-200">
+                                                            <img 
+                                                                src={customQrImage || `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=PromptPay-${promptpayNo}-${cartTotal}`} 
+                                                                alt="PromptPay QR" 
+                                                                className="w-52 h-52 sm:w-60 sm:h-60 mx-auto object-contain rounded-lg"
+                                                                style={{ imageRendering: 'pixelated' }}
+                                                            />
                                                         </div>
-                                                        <div className="space-y-2">
-                                                            <label className="font-bold text-slate-700 block mb-1">📸 แนบรูปสลิปโอนเงิน *</label>
+                                                        <div className="text-xs text-slate-600 font-mono font-bold bg-white p-2 rounded-xl border border-slate-200">
+                                                            พร้อมเพย์: <span className="text-farm-800 font-black">{promptpayNo}</span>
+                                                            {bankAccountNo && <div className="text-[11px] text-slate-500 font-sans mt-0.5">{bankAccountNo}</div>}
+                                                        </div>
+                                                        <div className="space-y-2 pt-2 border-t">
+                                                            <label className="font-bold text-slate-700 block text-xs">📸 แนบรูปสลิปโอนเงิน *</label>
                                                             <input 
                                                                 type="file" 
                                                                 accept="image/*"
@@ -1012,7 +1042,7 @@
                                                                         reader.readAsDataURL(file);
                                                                     }
                                                                 }}
-                                                                className="w-full text-[11px] text-slate-500"
+                                                                className="w-full text-xs text-slate-500"
                                                             />
                                                             {slipPreview && (
                                                                 <div className="relative w-28 h-28 mx-auto mt-2 rounded-xl border overflow-hidden shadow-sm">
@@ -1046,6 +1076,7 @@
                             </div>
                         )}
 
+                        {}
                         {view === 'tracking' && (
                             <div className="space-y-4 max-w-3xl mx-auto">
                                 <h2 className="font-extrabold text-slate-900 text-lg">🚚 ติดตามสถานะออเดอร์จัดส่ง</h2>
@@ -1091,6 +1122,7 @@
                             </div>
                         )}
 
+                        {}
                         {view === 'backoffice' && (
                             <div className="space-y-6">
                                 {!isAdminLoggedIn ? (
@@ -1173,7 +1205,7 @@
                                             )}
                                         </div>
 
-                                        {/* Inventory Tab */}
+                                        {}
                                         {adminTab === 'inventory' && userRole === 'admin' && (
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                                                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-3">
@@ -1198,56 +1230,43 @@
                                                                     <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
                                                                 </div>
                                                                 <div>
-                                                                    <p className="font-extrabold text-slate-900">{p.name}</p>
-                                                                    <p className="text-slate-400">ปลีก: ฿{p.priceRetail} | ส่ง: ฿{p.priceWholesale} / {p.unit}</p>
-                                                                    <label className="cursor-pointer text-[11px] font-bold text-farm-800 hover:underline inline-flex items-center gap-1 mt-1 bg-farm-50 px-2.5 py-1 rounded-lg border border-farm-200">
-                                                                        <span>📷 เปลี่ยนรูป</span>
-                                                                        <input 
-                                                                            type="file" 
-                                                                            accept="image/*" 
-                                                                            className="hidden"
-                                                                            onChange={e => {
-                                                                                if (e.target.files && e.target.files[0]) {
-                                                                                    handleProductImageUpload(p.id, e.target.files[0]);
-                                                                                }
-                                                                            }}
-                                                                        />
-                                                                    </label>
+                                                                    <h4 className="font-extrabold text-slate-900">{p.name}</h4>
+                                                                    <p className="text-slate-400">ราคาปลีก ฿{p.priceRetail} | ส่ง ฿{p.priceWholesale} /{p.unit}</p>
                                                                 </div>
                                                             </div>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="text-slate-500 font-bold">สต็อก:</span>
+
+                                                            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                                                                 <button 
-                                                                    onClick={() => {
+                                                                    onClick={async () => {
                                                                         const step = p.category === 'salad' ? 0.5 : 1;
                                                                         const newStock = Math.max(0, roundStep(p.stock - step));
-                                                                        db.collection('products').doc(p.id).update({ stock: newStock });
+                                                                        await db.collection('products').doc(p.id).update({ stock: newStock });
                                                                     }}
-                                                                    className="w-8 h-8 bg-slate-100 rounded-xl font-extrabold text-slate-700 hover:bg-slate-200"
+                                                                    className="w-8 h-8 bg-slate-100 hover:bg-slate-200 rounded-xl font-extrabold text-slate-700"
                                                                 >
                                                                     -
                                                                 </button>
                                                                 <input 
-                                                                    type="number"
-                                                                    step={p.category === 'salad' ? '0.5' : '1'}
+                                                                    type="number" 
+                                                                    step={p.category === 'salad' ? "0.5" : "1"}
                                                                     value={p.stock}
-                                                                    onChange={e => {
+                                                                    onChange={async (e) => {
                                                                         const val = parseFloat(e.target.value) || 0;
-                                                                        db.collection('products').doc(p.id).update({ stock: roundStep(val) });
+                                                                        await db.collection('products').doc(p.id).update({ stock: roundStep(val) });
                                                                     }}
-                                                                    className="w-20 p-2 border rounded-xl font-bold text-center bg-slate-50"
+                                                                    className="w-20 p-1.5 border rounded-xl text-center font-extrabold bg-slate-50"
                                                                 />
+                                                                <span className="font-bold text-slate-500">{p.unit}</span>
                                                                 <button 
-                                                                    onClick={() => {
+                                                                    onClick={async () => {
                                                                         const step = p.category === 'salad' ? 0.5 : 1;
                                                                         const newStock = roundStep(p.stock + step);
-                                                                        db.collection('products').doc(p.id).update({ stock: newStock });
+                                                                        await db.collection('products').doc(p.id).update({ stock: newStock });
                                                                     }}
-                                                                    className="w-8 h-8 bg-slate-100 rounded-xl font-extrabold text-slate-700 hover:bg-slate-200"
+                                                                    className="w-8 h-8 bg-farm-800 hover:bg-farm-900 text-white rounded-xl font-extrabold"
                                                                 >
                                                                     +
                                                                 </button>
-                                                                <span className="font-bold text-slate-500">{p.unit}</span>
                                                             </div>
                                                         </div>
                                                     ))}
@@ -1255,68 +1274,179 @@
                                             </div>
                                         )}
 
-                                        {/* Sales Reports Tab */}
+                                        {}
                                         {adminTab === 'reports' && userRole === 'admin' && (
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                                                 <div className="flex justify-between items-center border-b pb-3">
-                                                    <h3 className="font-extrabold text-slate-900 text-base">📊 สรุปรายงานยอดขาย</h3>
-                                                    <button onClick={handleExportCSV} className="px-3 py-1.5 bg-slate-900 text-white font-bold text-xs rounded-xl shadow">
-                                                        📥 ดาวน์โหลด CSV
+                                                    <div>
+                                                        <h3 className="font-extrabold text-slate-900 text-base">📊 รายงานสรุปยอดขาย</h3>
+                                                        <p className="text-slate-500 text-xs">สรุปยอดคำสั่งซื้อทั้งหมดที่บันทึกในระบบ</p>
+                                                    </div>
+                                                    <button 
+                                                        onClick={handleExportCSV}
+                                                        className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs rounded-xl shadow flex items-center gap-1.5"
+                                                    >
+                                                        <span>📥</span>
+                                                        <span>ดาวน์โหลด CSV</span>
                                                     </button>
                                                 </div>
-                                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-center">
-                                                    <div className="bg-slate-50 p-4 rounded-2xl border">
-                                                        <p className="text-slate-400 text-[11px]">ยอดขายรวม</p>
-                                                        <p className="text-xl font-extrabold text-farm-800">฿{orders.reduce((sum, o) => sum + o.total, 0)}</p>
+
+                                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                                    <div className="bg-farm-50 p-4 rounded-2xl border border-farm-200 text-center">
+                                                        <p className="text-slate-500 text-xs font-bold">ยอดขายรวมทั้งหมด</p>
+                                                        <p className="text-xl sm:text-2xl font-black text-farm-800 mt-1">
+                                                            ฿{orders.reduce((sum, o) => sum + (o.total || 0), 0)}
+                                                        </p>
                                                     </div>
-                                                    <div className="bg-slate-50 p-4 rounded-2xl border">
-                                                        <p className="text-slate-400 text-[11px]">จำนวนออเดอร์</p>
-                                                        <p className="text-xl font-extrabold text-slate-900">{orders.length}</p>
+                                                    <div className="bg-blue-50 p-4 rounded-2xl border border-blue-200 text-center">
+                                                        <p className="text-slate-500 text-xs font-bold">จำนวนออเดอร์ทั้งหมด</p>
+                                                        <p className="text-xl sm:text-2xl font-black text-blue-800 mt-1">
+                                                            {orders.length} รายการ
+                                                        </p>
+                                                    </div>
+                                                    <div className="bg-amber-50 p-4 rounded-2xl border border-amber-200 text-center col-span-2 sm:col-span-1">
+                                                        <p className="text-slate-500 text-xs font-bold">ออเดอร์เครดิตค้างชำระ</p>
+                                                        <p className="text-xl sm:text-2xl font-black text-amber-800 mt-1">
+                                                            {orders.filter(o => o.isCredit && o.status !== 'completed').length} รายการ
+                                                        </p>
                                                     </div>
                                                 </div>
                                             </div>
                                         )}
 
-                                        {/* Farm Settings Tab */}
+                                        {}
                                         {adminTab === 'settings' && userRole === 'admin' && (
                                             <div className="space-y-6">
+                                                {/* Wholesale Whitelist Card */}
                                                 <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
-                                                    <div className="flex items-center justify-between border-b pb-3">
-                                                        <h3 className="font-extrabold text-slate-900 text-base">⚙️ ตั้งค่าข้อมูลฟาร์ม และการชำระเงิน</h3>
-                                                        <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${isFirebaseConnected ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
-                                                            {isFirebaseConnected ? '🟢 เชื่อมต่อ Firebase เรียบร้อย' : '🔴 ยังไม่ได้เปิด Firestore'}
-                                                        </span>
+                                                    <div className="border-b pb-3">
+                                                        <h3 className="font-extrabold text-slate-900 text-base">🏪 จัดการรายชื่อลูกค้าราคาพิเศษ / ร้านอาหาร / Shop</h3>
+                                                        <p className="text-slate-500 text-xs">ลงทะเบียนเบอร์โทรศัพท์ร้านค้าประจำ เพื่อรับสิทธิ์สั่งซื้อราคาส่ง (100.-/กก.) และสิทธิ์สั่งซื้อแบบเครดิตร้านค้า</p>
+                                                    </div>
+
+                                                    <form onSubmit={handleAddWholesaleCustomer} className="flex flex-col sm:flex-row items-center gap-2 bg-emerald-50/60 p-3 rounded-2xl border border-emerald-100 text-xs">
+                                                        <input 
+                                                            type="text" 
+                                                            placeholder="ชื่อร้านค้า / ลูกค้าประจำ (เช่น ร้านสลัดคุณน้อง)" 
+                                                            required
+                                                            value={newWholesaleName}
+                                                            onChange={e => setNewWholesaleName(e.target.value)}
+                                                            className="w-full sm:flex-1 p-2.5 border rounded-xl bg-white outline-none focus:border-farm-800"
+                                                        />
+                                                        <input 
+                                                            type="tel" 
+                                                            placeholder="เบอร์โทรศัพท์ (เช่น 0812345678)" 
+                                                            required
+                                                            value={newWholesalePhone}
+                                                            onChange={e => setNewWholesalePhone(e.target.value)}
+                                                            className="w-full sm:w-40 p-2.5 border rounded-xl bg-white text-center font-mono font-bold outline-none focus:border-farm-800"
+                                                        />
+                                                        <button type="submit" className="w-full sm:w-auto px-4 py-2.5 bg-farm-800 hover:bg-farm-900 text-white font-extrabold rounded-xl shadow whitespace-nowrap transition-all">
+                                                            + ลงทะเบียนร้านค้า
+                                                        </button>
+                                                    </form>
+
+                                                    <div className="divide-y divide-slate-100 text-xs">
+                                                        {wholesaleWhitelist.length === 0 ? (
+                                                            <div className="py-4 text-center text-slate-400">ยังไม่มีรายชื่อร้านค้าในระบบ</div>
+                                                        ) : (
+                                                            wholesaleWhitelist.map((shop, idx) => (
+                                                                <div key={shop.id || idx} className="py-3 flex items-center justify-between">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="w-6 h-6 bg-emerald-100 text-emerald-800 rounded-lg flex items-center justify-center font-bold text-[10px]">{idx + 1}</span>
+                                                                        <div>
+                                                                            <p className="font-extrabold text-slate-900">{shop.name}</p>
+                                                                            <p className="text-slate-400 font-mono text-[11px]">📞 {shop.phone}</p>
+                                                                        </div>
+                                                                    </div>
+                                                                    <button 
+                                                                        type="button"
+                                                                        onClick={() => handleDeleteWholesaleCustomer(shop.id)} 
+                                                                        className="text-rose-500 font-bold hover:underline px-2 py-1 rounded-lg hover:bg-rose-50 transition-all text-[11px]"
+                                                                    >
+                                                                        ลบรายชื่อ
+                                                                    </button>
+                                                                </div>
+                                                            ))
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* Farm Details Form Card */}
+                                                <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
+                                                    <div className="border-b pb-3">
+                                                        <h3 className="font-extrabold text-slate-900 text-base">🏡 ตั้งค่าข้อมูลเกื้อบุญฟาร์ม & การชำระเงิน</h3>
                                                     </div>
 
                                                     <form onSubmit={handleSaveFarmSettings} className="space-y-3 text-xs">
                                                         <div>
-                                                            <label className="font-bold text-slate-700 block mb-1">ชื่อฟาร์ม</label>
-                                                            <input type="text" value={farmName} onChange={e => setFarmName(e.target.value)} className="w-full p-2.5 border rounded-xl" />
-                                                        </div>
-                                                        <div>
-                                                            <label className="font-bold text-slate-700 block mb-1">เลขประจำตัวผู้เสียภาษี</label>
-                                                            <input type="text" value={taxId} onChange={e => setTaxId(e.target.value)} className="w-full p-2.5 border rounded-xl" />
-                                                        </div>
-                                                        <div>
-                                                            <label className="font-bold text-slate-700 block mb-1">ที่อยู่ฟาร์ม</label>
-                                                            <textarea rows="2" value={farmAddress} onChange={e => setFarmAddress(e.target.value)} className="w-full p-2.5 border rounded-xl"></textarea>
-                                                        </div>
-                                                        <div>
-                                                            <label className="font-bold text-slate-700 block mb-1">เบอร์โทรศัพท์ฟาร์ม</label>
-                                                            <input type="text" value={farmPhone} onChange={e => setFarmPhone(e.target.value)} className="w-full p-2.5 border rounded-xl" />
-                                                        </div>
-                                                        <div>
-                                                            <label className="font-bold text-slate-700 block mb-1">เบอร์พร้อมเพย์ (PromptPay)</label>
-                                                            <input type="text" value={promptpayNo} onChange={e => setPromptpayNo(e.target.value)} className="w-full p-2.5 border rounded-xl" />
+                                                            <label className="font-bold text-slate-700 block mb-1">ชื่อฟาร์ม / ร้านค้า</label>
+                                                            <input 
+                                                                type="text" 
+                                                                value={farmName}
+                                                                onChange={e => setFarmName(e.target.value)}
+                                                                className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none focus:border-farm-800"
+                                                            />
                                                         </div>
 
                                                         <div>
-                                                            <label className="font-bold text-slate-700 block mb-1">📸 อัปโหลดรูป QR Code พร้อมเพย์หน้าร้านค้า</label>
+                                                            <label className="font-bold text-slate-700 block mb-1">เลขประจำตัวผู้เสียภาษี (Tax ID)</label>
+                                                            <input 
+                                                                type="text" 
+                                                                value={taxId}
+                                                                onChange={e => setTaxId(e.target.value)}
+                                                                className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none font-mono focus:border-farm-800"
+                                                            />
+                                                        </div>
+
+                                                        <div>
+                                                            <label className="font-bold text-slate-700 block mb-1">ที่อยู่ฟาร์ม</label>
+                                                            <textarea 
+                                                                rows="2"
+                                                                value={farmAddress}
+                                                                onChange={e => setFarmAddress(e.target.value)}
+                                                                className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none focus:border-farm-800"
+                                                            ></textarea>
+                                                        </div>
+
+                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                            <div>
+                                                                <label className="font-bold text-slate-700 block mb-1">เบอร์โทรศัพท์ฟาร์ม</label>
+                                                                <input 
+                                                                    type="text" 
+                                                                    value={farmPhone}
+                                                                    onChange={e => setFarmPhone(e.target.value)}
+                                                                    className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none focus:border-farm-800"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className="font-bold text-slate-700 block mb-1">เบอร์ PromptPay</label>
+                                                                <input 
+                                                                    type="text" 
+                                                                    value={promptpayNo}
+                                                                    onChange={e => setPromptpayNo(e.target.value)}
+                                                                    className="w-full p-2.5 border rounded-xl bg-slate-50 font-mono outline-none focus:border-farm-800"
+                                                                />
+                                                            </div>
+                                                        </div>
+
+                                                        <div>
+                                                            <label className="font-bold text-slate-700 block mb-1">รายละเอียดบัญชีธนาคาร</label>
+                                                            <input 
+                                                                type="text" 
+                                                                value={bankAccountNo}
+                                                                onChange={e => setBankAccountNo(e.target.value)}
+                                                                className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none focus:border-farm-800"
+                                                            />
+                                                        </div>
+
+                                                        <div>
+                                                            <label className="font-bold text-slate-700 block mb-1">📸 อัปโหลดรูป QR Code พร้อมเพย์หน้าร้านค้า (ภาพคมชัด ไม่บีบอัด)</label>
                                                             <div className="flex items-center gap-3 bg-slate-50 p-2.5 rounded-xl border">
                                                                 {customQrImage ? (
-                                                                    <img src={customQrImage} alt="QR Code Preview" className="w-14 h-14 object-cover rounded-lg border bg-white p-1" />
+                                                                    <img src={customQrImage} alt="QR Code Preview" className="w-16 h-16 object-contain rounded-lg border bg-white p-1" />
                                                                 ) : (
-                                                                    <div className="w-14 h-14 bg-slate-200 rounded-lg flex items-center justify-center text-slate-400 text-xs font-bold">ไม่มีรูป</div>
+                                                                    <div className="w-16 h-16 bg-slate-200 rounded-lg flex items-center justify-center text-slate-400 text-xs font-bold">ไม่มีรูป</div>
                                                                 )}
                                                                 <input 
                                                                     type="file" 
@@ -1345,6 +1475,7 @@
                                                     </form>
                                                 </div>
 
+                                                {/* Staff Management Card */}
                                                 <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
                                                     <div className="border-b pb-3">
                                                         <h3 className="font-extrabold text-slate-900 text-base">👥 จัดการสิทธิ์และรหัส PIN พนักงาน</h3>
@@ -1418,7 +1549,7 @@
                                             </div>
                                         )}
 
-                                        {/* Orders Active & Completed Tab */}
+                                        {}
                                         {(adminTab === 'active' || adminTab === 'completed') && (
                                             <div className="space-y-4">
                                                 {orders.filter(o => adminTab === 'completed' ? o.status === 'completed' : o.status !== 'completed').map(order => (
@@ -1455,7 +1586,6 @@
                                                             </div>
                                                         </div>
 
-                                                        {/* Items & Address */}
                                                         <div className="text-xs space-y-1">
                                                             {order.items && order.items.map((it, idx) => (
                                                                 <div key={idx} className="flex justify-between text-slate-600">
@@ -1505,6 +1635,7 @@
                         )}
                     </main>
 
+                    {}
                     {selectedOrderDetails && (
                         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
                             <div className="bg-white w-full max-w-3xl rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl my-auto">
@@ -1606,6 +1737,7 @@
                         </div>
                     )}
 
+                    {}
                     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 md:hidden z-20">
                         <div className="grid grid-cols-3 text-center py-2 text-[11px] font-bold">
                             <button onClick={() => setView('store')} className={`space-y-0.5 ${view === 'store' ? 'text-farm-800' : 'text-slate-400'}`}>
