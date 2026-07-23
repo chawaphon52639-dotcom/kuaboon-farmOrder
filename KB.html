@@ -1,0 +1,1339 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>เกื้อบุญฟาร์ม - ผักปลอดสารสดจากแปลง</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React 18 & ReactDOM UMD -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <!-- Babel standalone for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- FontAwesome 6 Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Font: Prompt -->
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        farm: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            200: '#bbf7d0',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                            800: '#166534',
+                            900: '#14532d',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Prompt', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Prompt', sans-serif; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        @media print {
+            body * { visibility: hidden; }
+            #printable-area, #printable-area * { visibility: visible; }
+            #printable-area { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 20px; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // Utility to convert numeric amount to Thai Baht text format
+        function bahtText(num) {
+            if (!num || isNaN(num) || num === 0) return 'ศูนย์บาทถ้วน';
+            num = Math.round(num * 100) / 100;
+            const digits = ['ศูนย์', 'หนึ่ง', 'สอง', 'สาม', 'สี่', 'ห้า', 'หก', 'เจ็ด', 'แปด', 'เก้า'];
+            const positions = ['', 'สิบ', 'ร้อย', 'พัน', 'หมื่น', 'แสน', 'ล้าน'];
+            
+            let [baht, satang] = num.toString().split('.');
+            let bahtStr = '';
+            
+            let len = baht.length;
+            for (let i = 0; i < len; i++) {
+                let digit = parseInt(baht[i]);
+                let pos = len - i - 1;
+                if (digit !== 0) {
+                    if (pos === 1 && digit === 1) {
+                        bahtStr += 'สิบ';
+                    } else if (pos === 1 && digit === 2) {
+                        bahtStr += 'ยี่สิบ';
+                    } else if (pos === 0 && digit === 1 && len > 1) {
+                        bahtStr += 'เอ็ด';
+                    } else {
+                        bahtStr += digits[digit] + positions[pos % 6];
+                    }
+                }
+            }
+            bahtStr += 'บาท';
+            if (!satang || parseInt(satang) === 0) {
+                bahtStr += 'ถ้วน';
+            } else {
+                let s = parseInt(satang.padEnd(2, '0').slice(0, 2));
+                if (s > 0) {
+                    let ten = Math.floor(s / 10);
+                    let unit = s % 10;
+                    if (ten === 1) bahtStr += 'สิบ';
+                    else if (ten === 2) bahtStr += 'ยี่สิบ';
+                    else if (ten > 2) bahtStr += digits[ten] + 'สิบ';
+                    
+                    if (unit === 1 && ten > 0) bahtStr += 'เอ็ด';
+                    else if (unit > 0) bahtStr += digits[unit];
+                    bahtStr += 'สตางค์';
+                } else {
+                    bahtStr += 'ถ้วน';
+                }
+            }
+            return bahtStr;
+        }
+
+        const INITIAL_PRODUCTS = [
+            { id: 1, name: 'กรีนโอ๊ค (Green Oak)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 45, unit: 'กก.', image: 'https://images.unsplash.com/photo-1622206151226-18ca2c9ab4a1?auto=format&fit=crop&w=400&q=80', desc: 'สด กรอบ หวาน ไม่ขม เก็บสดจากแปลงทุกเช้า' },
+            { id: 2, name: 'เรดโอ๊ค (Red Oak)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 30, unit: 'กก.', image: 'https://images.unsplash.com/photo-1556801712-76c8eb07ebb1?auto=format&fit=crop&w=400&q=80', desc: 'ใบสีแดงม่วง สวยงาม ไฟเบอร์สูง เหมาะทำสลัด' },
+            { id: 3, name: 'เบบี้คอส (Baby Cos)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 25, unit: 'กก.', image: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=400&q=80', desc: 'กรอบ แน่น เหมาะสำหรับทำซีซาร์สลัด' },
+            { id: 4, name: 'กรีนคอส (Green Cos)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 20, unit: 'กก.', image: 'https://images.unsplash.com/photo-1515471209610-e3f170587778?auto=format&fit=crop&w=400&q=80', desc: 'ใบกรอบ ทรงสวย รสชาติหวานกรอบธรรมชาติ' },
+            { id: 5, name: 'ฟินเลย์ (Frillice Iceberg)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 15, unit: 'กก.', image: 'https://images.unsplash.com/photo-1508747703725-719777637510?auto=format&fit=crop&w=400&q=80', desc: 'ใบหยิกกรอบมาก ฉ่ำน้ำ ทานง่าย' },
+            { id: 6, name: 'บัตเตอร์เฮด (Butterhead)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 18, unit: 'กก.', image: 'https://images.unsplash.com/photo-1556801712-76c8eb07ebb1?auto=format&fit=crop&w=400&q=80', desc: 'ใบนุ่มละมุน หวานธรรมชาติ ไม่มีความขม' },
+            { id: 7, name: 'ผักเคลสด (Organic Kale)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 12, unit: 'กก.', image: 'https://images.unsplash.com/photo-1524179091875-bf98a9a6ae57?auto=format&fit=crop&w=400&q=80', desc: 'ราชินีแห่งผักใบเขียว คุณประโยชน์สูง วิตามินแน่น' },
+            { id: 8, name: 'ผักสลัดรวม (Mixed Salad)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 50, unit: 'กก.', image: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=400&q=80', desc: 'ผักสลัดรวมมิตร 8 ชนิด สด กรอบ คละพร้อมทาน' },
+            { id: 9, name: 'เคลปั่นปลอดสาร', category: 'drink', priceRetail: 50, priceWholesale: 50, stock: 40, unit: 'ขวด', image: 'https://images.unsplash.com/photo-1610970881699-44a5587cabec?auto=format&fit=crop&w=400&q=80', desc: 'เคลปั่นปลอดสาร น้ำตาล0% สดชื่น มีประโยชน์' }
+        ];
+
+        const INITIAL_ORDERS = [
+            {
+                id: 'ORD-20260723-001',
+                docNo: 'RC-001/23072026/2026',
+                date: '2026-07-23 08:30',
+                customerName: 'ร้านสลัดคุณน้อง',
+                phone: '0891234567',
+                address: '123/4 ถ.สุขาภิบาล อ.เมือง',
+                mapsUrl: 'https://maps.google.com',
+                paymentType: 'promptpay',
+                isCredit: false,
+                items: [
+                    { id: 1, name: 'กรีนโอ๊ค (Green Oak)', qty: 3, price: 100, unit: 'กก.' },
+                    { id: 8, name: 'ผักสลัดรวม (Mixed Salad)', qty: 2, price: 100, unit: 'กก.' }
+                ],
+                subtotal: 500,
+                shippingFee: 0,
+                total: 500,
+                status: 'pending', // 'pending', 'packing', 'shipping', 'completed'
+                slipImage: 'https://placehold.co/400x600/e2e8f0/1e293b?text=Payment+Slip+Proof',
+                proofImage: null
+            },
+            {
+                id: 'ORD-20260723-002',
+                docNo: 'DN-002/23072026/2026',
+                date: '2026-07-23 09:15',
+                customerName: 'ร้านอาหารเกื้อบุญ',
+                phone: '0819876543',
+                address: '88 หมู่ 2 ต.ในเมือง',
+                mapsUrl: '',
+                paymentType: 'credit',
+                isCredit: true,
+                items: [
+                    { id: 7, name: 'ผักเคลสด (Organic Kale)', qty: 5, price: 100, unit: 'กก.' },
+                    { id: 9, name: 'เคลปั่นปลอดสาร', qty: 10, price: 50, unit: 'ขวด' }
+                ],
+                subtotal: 1000,
+                shippingFee: 0,
+                total: 1000,
+                status: 'shipping',
+                slipImage: null,
+                proofImage: 'https://placehold.co/600x400/dcfce7/14532d?text=Delivered+Proof+Photo'
+            }
+        ];
+
+        function App() {
+            // App state
+            const [view, setView] = React.useState('store'); // 'store', 'cart', 'tracking', 'backoffice'
+            const [products, setProducts] = React.useState(INITIAL_PRODUCTS);
+            const [cart, setCart] = React.useState([]);
+            const [customerType, setCustomerType] = React.useState('retail'); // 'retail', 'wholesale'
+            const [selectedCategory, setSelectedCategory] = React.useState('all');
+            const [orders, setOrders] = React.useState(INITIAL_ORDERS);
+
+            // Checkout Form State
+            const [custName, setCustName] = React.useState('');
+            const [custPhone, setCustPhone] = React.useState('');
+            const [custAddress, setCustAddress] = React.useState('');
+            const [custMapsUrl, setCustMapsUrl] = React.useState('');
+            const [isCreditOrder, setIsCreditOrder] = React.useState(false);
+            const [slipFile, setSlipFile] = React.useState(null);
+            const [slipPreview, setSlipPreview] = React.useState('');
+
+            // Backoffice / Role Management State
+            const [adminPin, setAdminPin] = React.useState('');
+            const [isAdminLoggedIn, setIsAdminLoggedIn] = React.useState(false);
+            const [userRole, setUserRole] = React.useState(null); // 'admin' or 'staff'
+            const [activeStaffName, setActiveStaffName] = React.useState('');
+            const [masterAdminPin, setMasterAdminPin] = React.useState('1234');
+            const [staffList, setStaffList] = React.useState([
+                { id: 1, name: 'พนักงานแพ็คผัก 1', pin: '1111' },
+                { id: 2, name: 'พนักงานจัดส่ง 2', pin: '2222' }
+            ]);
+            const [adminTab, setAdminTab] = React.useState('active'); // 'active', 'completed', 'reports', 'inventory', 'settings', 'wholesale_whitelist'
+
+            // Farm Settings State
+            const [farmName, setFarmName] = React.useState('เกื้อบุญฟาร์ม (Kuaboon Farm)');
+            const [taxId, setTaxId] = React.useState('0105563012345');
+            const [farmAddress, setFarmAddress] = React.useState('123 หมู่ 4 ต.ผักสด อ.เมือง จ.นครราชสีมา 30000');
+            const [farmPhone, setFarmPhone] = React.useState('081-234-5678');
+            const [promptpayNo, setPromptpayNo] = React.useState('0812345678');
+            const [bankAccountNo, setBankAccountNo] = React.useState('123-4-56789-0 (ธนาคารกสิกรไทย)');
+            const [customQrImage, setCustomQrImage] = React.useState('');
+            const [isSettingsSaved, setIsSettingsSaved] = React.useState(false);
+
+            // Staff & Whitelist Form States
+            const [newStaffName, setNewStaffName] = React.useState('');
+            const [newStaffPin, setNewStaffPin] = React.useState('');
+            const [wholesaleWhitelist, setWholesaleWhitelist] = React.useState([
+                { phone: '0891234567', name: 'ร้านสลัดคุณน้อง' },
+                { phone: '0819876543', name: 'ร้านอาหารเกื้อบุญ' }
+            ]);
+            const [newWholesalePhone, setNewWholesalePhone] = React.useState('');
+            const [newWholesaleName, setNewWholesaleName] = React.useState('');
+
+            // Modals
+            const [selectedOrderDetails, setSelectedOrderDetails] = React.useState(null);
+            const [showCartDrawer, setShowCartDrawer] = React.useState(false);
+
+            // Calculate total weight of salad veggies in cart
+            const totalSaladKg = cart
+                .filter(item => item.category === 'salad')
+                .reduce((sum, item) => sum + item.qty, 0);
+
+            // Auto wholesale discount rule: If >= 5kg total salad veggies, upgrade all to wholesale price 100.-
+            const isEligibleForWholesalePrice = customerType === 'wholesale' || totalSaladKg >= 5;
+
+            // Compute current price for an item
+            const getItemPrice = (product) => {
+                if (product.category === 'salad') {
+                    return isEligibleForWholesalePrice ? product.priceWholesale : product.priceRetail;
+                }
+                return product.priceRetail;
+            };
+
+            // Cart Operations
+            const addToCart = (product) => {
+                if (product.stock <= 0) return;
+                const existing = cart.find(item => item.id === product.id);
+                if (existing) {
+                    if (existing.qty >= product.stock) return;
+                    setCart(cart.map(item => item.id === product.id ? { ...item, qty: item.qty + 1 } : item));
+                } else {
+                    setCart([...cart, { ...product, qty: 1 }]);
+                }
+            };
+
+            const updateCartQty = (id, delta) => {
+                setCart(cart.map(item => {
+                    if (item.id === id) {
+                        const newQty = item.qty + delta;
+                        return newQty > 0 ? { ...item, qty: newQty } : null;
+                    }
+                    return item;
+                }).filter(Boolean));
+            };
+
+            const cartSubtotal = cart.reduce((sum, item) => sum + (getItemPrice(item) * item.qty), 0);
+            const shippingFee = 0; // Free shipping as per request
+            const cartTotal = cartSubtotal + shippingFee;
+
+            // Handle GPS location click
+            const handleGetGpsLocation = () => {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            const url = `https://www.google.com/maps?q=${position.coords.latitude},${position.coords.longitude}`;
+                            setCustMapsUrl(url);
+                        },
+                        () => alert('ไม่สามารถดึงพิกัด GPS ได้ กรุณาเปิดระบบ GPS หรือวางลิงก์ Google Maps โดยตรง')
+                    );
+                } else {
+                    alert('เบราว์เซอร์ไม่รองรับการดึง GPS');
+                }
+            };
+
+            // Checkout Handler
+            const handlePlaceOrder = (e) => {
+                e.preventDefault();
+                if (cart.length === 0) return;
+
+                // Check if wholesale / credit is authorized
+                if (isCreditOrder || customerType === 'wholesale') {
+                    const isApproved = wholesaleWhitelist.some(w => w.phone.replace(/[^0-9]/g, '') === custPhone.replace(/[^0-9]/g, ''));
+                    if (!isApproved && isCreditOrder) {
+                        alert('⚠️ เบอร์โทรศัพท์นี้ยังไม่ได้รับสิทธิ์สั่งซื้อแบบ "เครดิต" กรุณาเลือกชำระแบบโอนเงิน หรือติดต่อผู้ดูแลระบบ');
+                        return;
+                    }
+                }
+
+                if (!isCreditOrder && !slipPreview) {
+                    alert('⚠️ กรุณาแนบสลิปการโอนเงินชำระสินค้า');
+                    return;
+                }
+
+                const newDocNo = `${isCreditOrder ? 'DN' : 'RC'}-${String(orders.length + 1).padStart(3, '0')}/${new Date().toISOString().slice(0,10).replace(/-/g,'')}/${new Date().getFullYear()}`;
+
+                const newOrder = {
+                    id: `ORD-${Date.now()}`,
+                    docNo: newDocNo,
+                    date: new Date().toLocaleString('th-TH'),
+                    customerName: custName,
+                    phone: custPhone,
+                    address: custAddress,
+                    mapsUrl: custMapsUrl,
+                    paymentType: isCreditOrder ? 'credit' : 'promptpay',
+                    isCredit: isCreditOrder,
+                    items: cart.map(i => ({ ...i, price: getItemPrice(i) })),
+                    subtotal: cartSubtotal,
+                    shippingFee: shippingFee,
+                    total: cartTotal,
+                    status: 'pending',
+                    slipImage: slipPreview || null,
+                    proofImage: null
+                };
+
+                // Deduct stock
+                setProducts(products.map(p => {
+                    const cItem = cart.find(ci => ci.id === p.id);
+                    return cItem ? { ...p, stock: Math.max(0, p.stock - cItem.qty) } : p;
+                }));
+
+                setOrders([newOrder, ...orders]);
+                setCart([]);
+                setShowCartDrawer(false);
+                setSlipPreview('');
+                setSlipFile(null);
+
+                // Confetti celebration
+                if (window.confetti) {
+                    window.confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+                }
+
+                setView('tracking');
+            };
+
+            // Backoffice Login Handler (Admin vs Staff)
+            const handleBackofficeLogin = (e) => {
+                e.preventDefault();
+                if (adminPin === masterAdminPin) {
+                    setUserRole('admin');
+                    setActiveStaffName('ผู้ดูแลระบบ (Admin)');
+                    setIsAdminLoggedIn(true);
+                    setAdminPin('');
+                } else {
+                    const foundStaff = staffList.find(s => s.pin === adminPin);
+                    if (foundStaff) {
+                        setUserRole('staff');
+                        setActiveStaffName(foundStaff.name);
+                        setIsAdminLoggedIn(true);
+                        setAdminTab('active'); // Staff can only see active orders
+                        setAdminPin('');
+                    } else {
+                        alert('รหัส PIN ไม่ถูกต้อง (Admin PIN: 1234, รหัสพนักงานทดสอบ: 1111 หรือ 2222)');
+                    }
+                }
+            };
+
+            // Order Status Update
+            const updateOrderStatus = (orderId, newStatus) => {
+                setOrders(orders.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+            };
+
+            // Export CSV Report
+            const exportCSVReport = () => {
+                let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
+                csvContent += "เลขที่เอกสาร,วันที่,ชื่อลูกค้า,เบอร์โทร,ยอดเงินรวม,ประเภทชำระ,สถานะ\n";
+                orders.forEach(o => {
+                    csvContent += `"${o.docNo}","${o.date}","${o.customerName}","${o.phone}",${o.total},"${o.isCredit ? 'เครดิต' : 'โอนเงิน'}","${o.status}"\n`;
+                });
+                const encodedUri = encodeURI(csvContent);
+                const link = document.createElement("a");
+                link.setAttribute("href", encodedUri);
+                link.setAttribute("download", `รายงานยอดขาย_เกื้อบุญฟาร์ม_${new Date().toISOString().slice(0,10)}.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            };
+
+            return (
+                <div className="min-h-screen flex flex-col pb-20 md:pb-6">
+                    {/* Header Banner */}
+                    <header className="bg-farm-900 text-white shadow-md sticky top-0 z-30">
+                        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+                            <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('store')}>
+                                <div className="w-10 h-10 bg-farm-500 rounded-2xl flex items-center justify-center text-xl shadow-inner">
+                                    🌾
+                                </div>
+                                <div>
+                                    <h1 className="font-extrabold text-lg sm:text-xl tracking-tight leading-none text-farm-100">เกื้อบุญฟาร์ม</h1>
+                                    <p className="text-[11px] text-farm-200 font-light mt-0.5">ผักปลอดสารสดจากแปลง • ส่งตรงถึงบ้านคุณ</p>
+                                </div>
+                            </div>
+
+                            {/* Top Action Nav Items */}
+                            <div className="flex items-center gap-2">
+                                <button 
+                                    onClick={() => setView('tracking')} 
+                                    className="px-3 py-1.5 bg-farm-800 hover:bg-farm-700 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-all"
+                                >
+                                    <i className="fas fa-truck text-farm-200"></i>
+                                    <span className="hidden sm:inline">ติดตามออเดอร์</span>
+                                </button>
+
+                                <button 
+                                    onClick={() => setShowCartDrawer(true)} 
+                                    className="relative px-3.5 py-1.5 bg-farm-500 hover:bg-farm-600 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-lg"
+                                >
+                                    <i className="fas fa-shopping-basket text-sm"></i>
+                                    <span>ตะกร้า</span>
+                                    {cart.length > 0 && (
+                                        <span className="bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-extrabold animate-bounce">
+                                            {cart.reduce((s, i) => s + i.qty, 0)}
+                                        </span>
+                                    )}
+                                </button>
+
+                                {/* Secret Backoffice Login Icon Button (User & Wrench symbol) */}
+                                <button 
+                                    onClick={() => setView('backoffice')} 
+                                    title="ส่วนงานปฏิบัติการ" 
+                                    className="w-9 h-9 bg-farm-800 hover:bg-amber-600 text-amber-200 hover:text-white rounded-xl flex items-center justify-center transition-all ml-1"
+                                >
+                                    <span className="text-sm">👤🔧</span>
+                                </button>
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* Main Container */}
+                    <main className="max-w-6xl mx-auto px-4 py-6 flex-1 w-full">
+                        {view === 'store' && (
+                            <div className="space-y-6">
+                                {/* Customer Tier & Dynamic Wholesale Banner */}
+                                <div className="bg-gradient-to-r from-farm-800 to-farm-900 text-white p-4 sm:p-5 rounded-3xl shadow-lg space-y-3">
+                                    <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+                                        <div>
+                                            <span className="bg-farm-500/30 text-farm-200 text-xs px-3 py-1 rounded-full font-semibold border border-farm-400/30">
+                                                🥬 โปรโมชันราคาส่งผักปลอดสาร
+                                            </span>
+                                            <h2 className="text-lg sm:text-xl font-extrabold mt-1">
+                                                สั่งซื้อผักปลอดสารสดจากฟาร์ม
+                                            </h2>
+                                            <p className="text-xs text-farm-200 mt-0.5">
+                                                ราคาปลีก 120.-/กก. | <span className="text-amber-300 font-bold">ราคาส่ง 100.-/กก.</span> (เมื่อสั่งรวมกันครบ 5 กก. ขึ้นไป หรือเป็นร้านค้าประจำ)
+                                            </p>
+                                        </div>
+
+                                        {/* Customer Tier Toggle */}
+                                        <div className="bg-white/10 p-1 rounded-2xl flex items-center gap-1 w-full md:w-auto">
+                                            <button 
+                                                onClick={() => setCustomerType('retail')} 
+                                                className={`flex-1 md:flex-none px-4 py-2 rounded-xl text-xs font-bold transition-all ${customerType === 'retail' ? 'bg-white text-farm-900 shadow' : 'text-farm-100 hover:text-white'}`}
+                                            >
+                                                👤 ลูกค้าทั่วไป
+                                            </button>
+                                            <button 
+                                                onClick={() => setCustomerType('wholesale')} 
+                                                className={`flex-1 md:flex-none px-4 py-2 rounded-xl text-xs font-bold transition-all ${customerType === 'wholesale' ? 'bg-amber-400 text-slate-900 shadow' : 'text-farm-100 hover:text-white'}`}
+                                            >
+                                                🏪 ร้านอาหาร / Shop
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Wholesale Progress Alert */}
+                                    {customerType === 'retail' && (
+                                        <div className="bg-farm-950/50 p-3 rounded-2xl border border-farm-600/30 flex items-center justify-between text-xs">
+                                            <div className="flex items-center gap-2">
+                                                <i className="fas fa-calculator text-amber-400"></i>
+                                                <span>
+                                                    ยอดรวมผักสลัดในตะกร้า: <strong className="text-amber-300 font-bold">{totalSaladKg} กก.</strong>
+                                                </span>
+                                            </div>
+                                            {totalSaladKg >= 5 ? (
+                                                <span className="text-emerald-300 font-bold bg-emerald-950/80 px-2.5 py-1 rounded-xl">
+                                                    🎉 ได้รับราคาส่ง 100.- แล้ว!
+                                                </span>
+                                            ) : (
+                                                <span className="text-farm-200">
+                                                    สั่งเพิ่มอีก <strong className="text-white font-bold">{5 - totalSaladKg} กก.</strong> เพื่อรับราคาส่ง 100.-
+                                                </span>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Product Category Filters */}
+                                <div className="flex items-center gap-2 overflow-x-auto pb-1 hide-scrollbar">
+                                    <button 
+                                        onClick={() => setSelectedCategory('all')} 
+                                        className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${selectedCategory === 'all' ? 'bg-farm-800 text-white shadow-md' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}
+                                    >
+                                        ทั้งหมด ({products.length})
+                                    </button>
+                                    <button 
+                                        onClick={() => setSelectedCategory('salad')} 
+                                        className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${selectedCategory === 'salad' ? 'bg-farm-800 text-white shadow-md' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}
+                                    >
+                                        🥬 ผักปลอดสารสด ({products.filter(p => p.category === 'salad').length})
+                                    </button>
+                                    <button 
+                                        onClick={() => setSelectedCategory('drink')} 
+                                        className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${selectedCategory === 'drink' ? 'bg-farm-800 text-white shadow-md' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}
+                                    >
+                                        🥤 เคลปั่นปลอดสาร ({products.filter(p => p.category === 'drink').length})
+                                    </button>
+                                </div>
+
+                                {/* Product Grid */}
+                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5">
+                                    {products.filter(p => selectedCategory === 'all' || p.category === selectedCategory).map(product => {
+                                        const currentPrice = getItemPrice(product);
+                                        const isWholesaleActive = product.category === 'salad' && isEligibleForWholesalePrice;
+
+                                        return (
+                                            <div key={product.id} className="bg-white rounded-3xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col justify-between group">
+                                                <div>
+                                                    <div className="relative aspect-square overflow-hidden bg-slate-100">
+                                                        <img 
+                                                            src={product.image} 
+                                                            alt={product.name} 
+                                                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+                                                            onError={(e) => { e.target.src = 'https://placehold.co/400x400/e2e8f0/1e293b?text=Organic+Veggie'; }}
+                                                        />
+                                                        {isWholesaleActive && (
+                                                            <span className="absolute top-2 left-2 bg-amber-400 text-slate-900 text-[10px] font-black px-2 py-0.5 rounded-full shadow-md">
+                                                                ราคาส่ง 100.-
+                                                            </span>
+                                                        )}
+                                                        <span className={`absolute bottom-2 right-2 text-[10px] font-bold px-2 py-0.5 rounded-full shadow ${product.stock < 10 ? 'bg-red-100 text-red-700 border border-red-300' : 'bg-white/90 text-slate-700'}`}>
+                                                            {product.stock > 0 ? `เหลือ ${product.stock} ${product.unit}` : 'สินค้าหมด'}
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="p-3 sm:p-4 space-y-1.5">
+                                                        <h3 className="font-extrabold text-slate-900 text-xs sm:text-sm line-clamp-1">
+                                                            {product.name}
+                                                        </h3>
+                                                        <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
+                                                            {product.desc}
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="p-3 sm:p-4 pt-0 space-y-2">
+                                                    <div className="flex items-baseline justify-between">
+                                                        <div>
+                                                            <span className="text-base sm:text-lg font-black text-farm-800">
+                                                                ฿{currentPrice}
+                                                            </span>
+                                                            <span className="text-[10px] text-slate-400 ml-1">/{product.unit}</span>
+                                                        </div>
+                                                        {isWholesaleActive && (
+                                                            <span className="text-[10px] text-slate-400 line-through">
+                                                                ฿{product.priceRetail}
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    <button 
+                                                        onClick={() => addToCart(product)} 
+                                                        disabled={product.stock <= 0} 
+                                                        className={`w-full py-2 px-3 rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow ${
+                                                            product.stock <= 0 
+                                                                ? 'bg-slate-200 text-slate-400 cursor-not-allowed' 
+                                                                : 'bg-farm-800 hover:bg-farm-900 text-white hover:scale-[1.02]'
+                                                        }`}
+                                                    >
+                                                        <i className="fas fa-plus"></i>
+                                                        <span>{product.stock > 0 ? 'หยิบลงตะกร้า' : 'สินค้าหมด'}</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
+                        {}
+                        {showCartDrawer && (
+                            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex justify-end transition-opacity">
+                                <div className="bg-white w-full max-w-md h-full shadow-2xl flex flex-col justify-between p-5 space-y-4 overflow-y-auto">
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between border-b pb-3">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-8 h-8 bg-farm-100 text-farm-800 rounded-xl flex items-center justify-center font-bold">
+                                                    🧺
+                                                </div>
+                                                <h2 className="font-extrabold text-slate-900 text-base">ตะกร้าสินค้าผักปลอดสาร</h2>
+                                            </div>
+                                            <button onClick={() => setShowCartDrawer(false)} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold">
+                                                ✕
+                                            </button>
+                                        </div>
+
+                                        {cart.length === 0 ? (
+                                            <div className="text-center py-12 space-y-3">
+                                                <div className="text-4xl text-slate-300">🥬</div>
+                                                <p className="text-slate-500 text-xs font-medium">ยังไม่มีรายการผักในตะกร้า</p>
+                                            </div>
+                                        ) : (
+                                            <div className="divide-y divide-slate-100">
+                                                {cart.map(item => (
+                                                    <div key={item.id} className="py-3 flex items-center justify-between gap-3 text-xs">
+                                                        <div className="flex-1">
+                                                            <h4 className="font-extrabold text-slate-900">{item.name}</h4>
+                                                            <p className="text-slate-400">฿{getItemPrice(item)} / {item.unit}</p>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 bg-slate-100 px-2 py-1 rounded-xl">
+                                                            <button onClick={() => updateCartQty(item.id, -1)} className="w-6 h-6 rounded-lg bg-white font-bold text-slate-700 shadow-sm">
+                                                                -
+                                                            </button>
+                                                            <span className="font-extrabold w-4 text-center">{item.qty}</span>
+                                                            <button onClick={() => updateCartQty(item.id, 1)} className="w-6 h-6 rounded-lg bg-white font-bold text-slate-700 shadow-sm">
+                                                                +
+                                                            </button>
+                                                        </div>
+                                                        <span className="font-extrabold text-slate-900 w-16 text-right">
+                                                            ฿{getItemPrice(item) * item.qty}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {cart.length > 0 && (
+                                        <div className="border-t pt-4 space-y-3">
+                                            <div className="space-y-1 text-xs">
+                                                <div className="flex justify-between text-slate-500">
+                                                    <span>ค่าสินค้า ({cart.reduce((s,i)=>s+i.qty,0)} รายการ)</span>
+                                                    <span className="font-bold text-slate-800">฿{cartSubtotal}</span>
+                                                </div>
+                                                <div className="flex justify-between text-slate-500">
+                                                    <span>ค่าจัดส่ง Express</span>
+                                                    <span className="font-bold text-emerald-600">ส่งฟรี 0.-</span>
+                                                </div>
+                                                <div className="flex justify-between text-slate-900 font-extrabold text-sm pt-2 border-t">
+                                                    <span>ยอดสุทธิ</span>
+                                                    <span className="text-farm-800">฿{cartTotal}</span>
+                                                </div>
+                                            </div>
+
+                                            {/* Checkout Form */}
+                                            <form onSubmit={handlePlaceOrder} className="space-y-3 pt-2 text-xs">
+                                                <div className="space-y-2">
+                                                    <input 
+                                                        type="text" 
+                                                        placeholder="ชื่อผู้รับสินค้า / ชื่อร้านค้า *" 
+                                                        required 
+                                                        value={custName} 
+                                                        onChange={(e) => setCustName(e.target.value)} 
+                                                        className="w-full p-2.5 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-farm-500"
+                                                    />
+                                                    <input 
+                                                        type="tel" 
+                                                        placeholder="เบอร์โทรศัพท์ติดต่อ *" 
+                                                        required 
+                                                        value={custPhone} 
+                                                        onChange={(e) => setCustPhone(e.target.value)} 
+                                                        className="w-full p-2.5 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-farm-500"
+                                                    />
+                                                    <textarea 
+                                                        placeholder="ที่อยู่จัดส่งสินค้าโดยละเอียด *" 
+                                                        required 
+                                                        rows="2" 
+                                                        value={custAddress} 
+                                                        onChange={(e) => setCustAddress(e.target.value)} 
+                                                        className="w-full p-2.5 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-farm-500"
+                                                    ></textarea>
+                                                </div>
+
+                                                {/* GPS Location helper */}
+                                                <div className="flex items-center gap-2">
+                                                    <input 
+                                                        type="url" 
+                                                        placeholder="ลิงก์ Google Maps (ถ้ามี)" 
+                                                        value={custMapsUrl} 
+                                                        onChange={(e) => setCustMapsUrl(e.target.value)} 
+                                                        className="flex-1 p-2 border border-slate-300 rounded-xl"
+                                                    />
+                                                    <button type="button" onClick={handleGetGpsLocation} className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl whitespace-nowrap">
+                                                        📍 ดึง GPS
+                                                    </button>
+                                                </div>
+
+                                                {/* Credit order option */}
+                                                <div className="bg-amber-50 p-3 rounded-2xl border border-amber-200 flex items-center justify-between">
+                                                    <div>
+                                                        <label className="font-bold text-amber-900 cursor-pointer flex items-center gap-2">
+                                                            <input 
+                                                                type="checkbox" 
+                                                                checked={isCreditOrder} 
+                                                                onChange={(e) => setIsCreditOrder(e.target.checked)} 
+                                                                className="w-4 h-4 rounded text-farm-600 focus:ring-farm-500"
+                                                            />
+                                                            <span>สั่งซื้อแบบ "เครดิต / วางบิล"</span>
+                                                        </label>
+                                                        <p className="text-[10px] text-amber-700 mt-0.5">
+                                                            (เฉพาะร้านค้าที่ผ่านการอนุมัติสิทธิ์แล้วเท่านั้น)
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                {/* Payment Slip Upload */}
+                                                {!isCreditOrder && (
+                                                    <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-2 text-center">
+                                                        <p className="font-bold text-slate-800 text-xs">📱 ชำระเงินผ่าน PromptPay / ธนาคาร</p>
+                                                        {customQrImage ? (
+                                                            <img src={customQrImage} alt="PromptPay QR" className="w-36 h-36 mx-auto rounded-xl shadow border" />
+                                                        ) : (
+                                                            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=PROMPTPAY-${promptpayNo}-${cartTotal}`} alt="QR Code" className="w-36 h-36 mx-auto rounded-xl border p-1 bg-white" />
+                                                        )}
+                                                        <p className="text-[11px] text-slate-600 font-bold">ยอดโอน: <span className="text-farm-800 font-extrabold">฿{cartTotal}</span></p>
+                                                        <p className="text-[10px] text-slate-400">{bankAccountNo}</p>
+                                                        
+                                                        <div className="pt-2">
+                                                            <label className="block font-bold text-xs text-slate-700 mb-1">แนบรูปภาพสลิปการโอนเงิน *</label>
+                                                            <input 
+                                                                type="file" 
+                                                                accept="image/*" 
+                                                                required={!isCreditOrder}
+                                                                onChange={(e) => {
+                                                                    const file = e.target.files[0];
+                                                                    if (file) {
+                                                                        const reader = new FileReader();
+                                                                        reader.onloadend = () => setSlipPreview(reader.result);
+                                                                        reader.readAsDataURL(file);
+                                                                    }
+                                                                }} 
+                                                                className="w-full text-[11px] text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-farm-100 file:text-farm-800"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                <button type="submit" className="w-full py-3 bg-farm-800 hover:bg-farm-900 text-white font-extrabold text-sm rounded-2xl shadow-lg transition-all">
+                                                    ยืนยันการสั่งซื้อผักสด 🌾
+                                                </button>
+                                            </form>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {}
+                        {view === 'tracking' && (
+                            <div className="max-w-2xl mx-auto bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-sm space-y-5">
+                                <div className="flex items-center justify-between border-b pb-3">
+                                    <h2 className="font-extrabold text-slate-900 text-lg">📦 ติดตามออเดอร์ผักปลอดสาร</h2>
+                                    <button onClick={() => setView('store')} className="text-xs text-farm-800 font-bold hover:underline">
+                                        ← กลับไปหน้าร้าน
+                                    </button>
+                                </div>
+
+                                {orders.length === 0 ? (
+                                    <p className="text-center text-slate-400 text-xs py-8">ยังไม่มีประวัติการสั่งซื้อ</p>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {orders.map(order => (
+                                            <div key={order.id} className="p-4 rounded-2xl border border-slate-200 bg-slate-50 space-y-3 text-xs">
+                                                <div className="flex items-center justify-between border-b pb-2">
+                                                    <div>
+                                                        <span className="font-bold text-slate-900">{order.docNo}</span>
+                                                        <p className="text-[10px] text-slate-400">{order.date}</p>
+                                                    </div>
+                                                    <span className={`px-2.5 py-1 rounded-full font-extrabold text-[11px] ${
+                                                        order.status === 'completed' ? 'bg-emerald-100 text-emerald-800' :
+                                                        order.status === 'shipping' ? 'bg-blue-100 text-blue-800' :
+                                                        order.status === 'packing' ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-700'
+                                                    }`}>
+                                                        {order.status === 'completed' ? '✅ ได้รับสินค้าแล้ว' :
+                                                         order.status === 'shipping' ? '🚚 กำลังจัดส่ง Express' :
+                                                         order.status === 'packing' ? '🥬 กำลังแพ็คผักสด' : '⏳ ได้รับออเดอร์แล้ว'}
+                                                    </span>
+                                                </div>
+
+                                                <div className="space-y-1">
+                                                    {order.items.map((it, idx) => (
+                                                        <div key={idx} className="flex justify-between text-slate-600">
+                                                            <span>• {it.name} x {it.qty} {it.unit}</span>
+                                                            <span>฿{it.price * it.qty}</span>
+                                                        </div>
+                                                    ))}
+                                                    <div className="flex justify-between font-bold text-slate-900 border-t pt-1 mt-1">
+                                                        <span>ยอดเงินสุทธิ</span>
+                                                        <span className="text-farm-800">฿{order.total}</span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Proof Image View */}
+                                                {order.proofImage && (
+                                                    <div className="pt-2">
+                                                        <p className="font-bold text-slate-700 text-[11px] mb-1">📸 รูปถ่ายหลักฐานการจัดส่ง:</p>
+                                                        <img src={order.proofImage} alt="Delivery Proof" className="w-full max-h-48 object-cover rounded-xl border" />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {}
+                        {view === 'backoffice' && (
+                            <div className="space-y-6">
+                                {!isAdminLoggedIn ? (
+                                    /* PIN Login Form */
+                                    <div className="max-w-md mx-auto bg-white p-6 sm:p-8 rounded-3xl shadow-xl border border-slate-200 text-center space-y-4 my-12">
+                                        <div className="w-16 h-16 bg-farm-100 text-farm-800 rounded-3xl flex items-center justify-center text-3xl mx-auto">
+                                            🔒
+                                        </div>
+                                        <div>
+                                            <h2 className="font-extrabold text-slate-900 text-lg">เข้าสู่ส่วนงานปฏิบัติการ</h2>
+                                            <p className="text-slate-500 text-xs mt-1">กรอก PIN ผู้ดูแลระบบ (1234) หรือ PIN พนักงาน (1111, 2222)</p>
+                                        </div>
+                                        <form onSubmit={handleBackofficeLogin} className="space-y-3">
+                                            <input 
+                                                type="password" 
+                                                maxLength="4" 
+                                                placeholder="กรอก PIN 4 หลัก" 
+                                                value={adminPin}
+                                                onChange={(e) => setAdminPin(e.target.value)}
+                                                className="w-full text-center tracking-widest text-2xl font-bold p-3 border border-slate-300 rounded-2xl focus:ring-2 focus:ring-farm-500 outline-none"
+                                            />
+                                            <button type="submit" className="w-full py-3 bg-farm-900 hover:bg-farm-800 text-white font-bold text-sm rounded-2xl shadow-lg transition-all">
+                                                เข้าสู่ระบบ
+                                            </button>
+                                        </form>
+                                    </div>
+                                ) : (
+                                    /* Logged In Dashboard */
+                                    <div className="space-y-6">
+                                        {/* Header & Role Badge */}
+                                        <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <h2 className="font-extrabold text-slate-900 text-lg">ส่วนงานจัดการและจัดส่งผักสด</h2>
+                                                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                                                        userRole === 'admin' ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-blue-100 text-blue-900 border border-blue-300'
+                                                    }`}>
+                                                        {userRole === 'admin' ? '👑 ผู้ดูแลระบบ (Admin)' : `👤 พนักงาน: ${activeStaffName}`}
+                                                    </span>
+                                                </div>
+                                                <p className="text-slate-500 text-xs mt-1">
+                                                    {userRole === 'admin' 
+                                                        ? 'บริหารจัดการคลังผักสด จัดการออเดอร์ ออกเอกสาร ตั้งค่าระบบ และดูรายงานรายได้' 
+                                                        : 'จัดการออเดอร์ อัปเดตสถานะการจัดส่ง และออกใบเสร็จ/ใบส่งสินค้า A4'}
+                                                </p>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                {userRole === 'admin' && (
+                                                    <button onClick={exportCSVReport} className="px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-2xl shadow transition-all flex items-center gap-1.5">
+                                                        <i className="fas fa-file-excel"></i>
+                                                        <span>ดาวน์โหลด Excel</span>
+                                                    </button>
+                                                )}
+                                                <button onClick={() => { setIsAdminLoggedIn(false); setUserRole(null); }} className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-2xl transition-all">
+                                                    ออกจากระบบ
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Sub Navigation Tabs (Restricted for Staff) */}
+                                        <div className="flex items-center gap-2 overflow-x-auto pb-1 hide-scrollbar">
+                                            <button onClick={() => setAdminTab('active')} className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${adminTab === 'active' ? 'bg-farm-900 text-white' : 'bg-white border text-slate-600'}`}>
+                                                📦 งานวันนี้ ({orders.filter(o => o.status !== 'completed').length})
+                                            </button>
+
+                                            {/* Admin only tabs */}
+                                            {userRole === 'admin' && (
+                                                <>
+                                                    <button onClick={() => setAdminTab('completed')} className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${adminTab === 'completed' ? 'bg-farm-900 text-white' : 'bg-white border text-slate-600'}`}>
+                                                        ✅ ส่งสำเร็จแล้ว ({orders.filter(o => o.status === 'completed').length})
+                                                    </button>
+                                                    <button onClick={() => setAdminTab('reports')} className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${adminTab === 'reports' ? 'bg-farm-900 text-white' : 'bg-white border text-slate-600'}`}>
+                                                        📊 รายงานสรุปรายได้
+                                                    </button>
+                                                    <button onClick={() => setAdminTab('inventory')} className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${adminTab === 'inventory' ? 'bg-farm-900 text-white' : 'bg-white border text-slate-600'}`}>
+                                                        🥬 จัดการสต็อกคลังผัก
+                                                    </button>
+                                                    <button onClick={() => setAdminTab('wholesale_whitelist')} className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${adminTab === 'wholesale_whitelist' ? 'bg-farm-900 text-white' : 'bg-white border text-slate-600'}`}>
+                                                        📋 ลูกค้าราคาส่งอนุมัติ ({wholesaleWhitelist.length})
+                                                    </button>
+                                                    <button onClick={() => setAdminTab('settings')} className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${adminTab === 'settings' ? 'bg-farm-900 text-white' : 'bg-white border text-slate-600'}`}>
+                                                        ⚙️ ตั้งค่าหัวบิล / สิทธิ์พนักงาน
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
+
+                                        {}
+                                        {userRole === 'admin' && adminTab === 'reports' ? (
+                                            <div className="space-y-6">
+                                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                                    <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-1">
+                                                        <span className="text-slate-500 text-xs font-bold">💵 ยอดขายวันนี้ (Daily)</span>
+                                                        <h3 className="text-2xl font-black text-farm-800">
+                                                            ฿{orders.reduce((sum, o) => sum + o.total, 0)}
+                                                        </h3>
+                                                        <p className="text-[10px] text-emerald-600 font-bold">ออเดอร์สดประจำวัน</p>
+                                                    </div>
+                                                    <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-1">
+                                                        <span className="text-slate-500 text-xs font-bold">📅 ยอดขายสัปดาห์นี้ (Weekly)</span>
+                                                        <h3 className="text-2xl font-black text-farm-800">
+                                                            ฿{orders.reduce((sum, o) => sum + o.total, 0)}
+                                                        </h3>
+                                                        <p className="text-[10px] text-emerald-600 font-bold">สะสม 7 วันล่าสุด</p>
+                                                    </div>
+                                                    <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-1">
+                                                        <span className="text-slate-500 text-xs font-bold">🗓️ ยอดขายเดือนนี้ (Monthly)</span>
+                                                        <h3 className="text-2xl font-black text-farm-800">
+                                                            ฿{orders.reduce((sum, o) => sum + o.total, 0)}
+                                                        </h3>
+                                                        <p className="text-[10px] text-emerald-600 font-bold">สรุปสะสมประจำเดือน</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : userRole === 'admin' && adminTab === 'inventory' ? (
+                                            <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+                                                <h3 className="font-extrabold text-slate-900 text-base border-b pb-3">🥬 จัดการสต็อกคลังผักสด</h3>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                                    {products.map(p => (
+                                                        <div key={p.id} className="p-3 border rounded-2xl flex items-center justify-between text-xs">
+                                                            <div>
+                                                                <span className="font-bold text-slate-900 block">{p.name}</span>
+                                                                <span className="text-slate-400">คงเหลือ: {p.stock} {p.unit}</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-1">
+                                                                <button onClick={() => setProducts(products.map(x => x.id === p.id ? { ...x, stock: Math.max(0, x.stock - 5) } : x))} className="px-2 py-1 bg-slate-100 rounded font-bold">
+                                                                    -5
+                                                                </button>
+                                                                <button onClick={() => setProducts(products.map(x => x.id === p.id ? { ...x, stock: x.stock + 5 } : x))} className="px-2 py-1 bg-farm-100 text-farm-800 rounded font-bold">
+                                                                    +5
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ) : userRole === 'admin' && adminTab === 'wholesale_whitelist' ? (
+                                            <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+                                                <div className="border-b pb-3">
+                                                    <h3 className="font-extrabold text-slate-900 text-base">📋 รายชื่อลูกค้าราคาส่ง / เครดิตที่ได้รับอนุมัติ</h3>
+                                                    <p className="text-slate-500 text-xs mt-0.5">เบอร์โทรศัพท์ที่บันทึกไว้ตรงนี้ จะได้รับสิทธิ์ราคาส่งและสั่งซื้อแบบเครดิตโดยอัตโนมัติ</p>
+                                                </div>
+
+                                                <form onSubmit={(e) => {
+                                                    e.preventDefault();
+                                                    if (!newWholesalePhone || !newWholesaleName) return;
+                                                    setWholesaleWhitelist([...wholesaleWhitelist, { phone: newWholesalePhone, name: newWholesaleName }]);
+                                                    setNewWholesalePhone('');
+                                                    setNewWholesaleName('');
+                                                }} className="flex flex-col sm:flex-row gap-2 bg-slate-50 p-3 rounded-2xl text-xs">
+                                                    <input 
+                                                        type="text" 
+                                                        placeholder="ชื่อร้านค้า / ลูกค้า" 
+                                                        required 
+                                                        value={newWholesaleName} 
+                                                        onChange={(e) => setNewWholesaleName(e.target.value)} 
+                                                        className="p-2 border rounded-xl flex-1"
+                                                    />
+                                                    <input 
+                                                        type="tel" 
+                                                        placeholder="เบอร์โทรศัพท์" 
+                                                        required 
+                                                        value={newWholesalePhone} 
+                                                        onChange={(e) => setNewWholesalePhone(e.target.value)} 
+                                                        className="p-2 border rounded-xl sm:w-44"
+                                                    />
+                                                    <button type="submit" className="px-4 py-2 bg-farm-800 text-white font-bold rounded-xl whitespace-nowrap">
+                                                        + เพิ่มอนุมัติ
+                                                    </button>
+                                                </form>
+
+                                                <div className="divide-y divide-slate-100 text-xs">
+                                                    {wholesaleWhitelist.map((item, idx) => (
+                                                        <div key={idx} className="py-2.5 flex items-center justify-between">
+                                                            <div>
+                                                                <span className="font-bold text-slate-900">{item.name}</span>
+                                                                <span className="text-slate-400 ml-2">({item.phone})</span>
+                                                            </div>
+                                                            <button onClick={() => setWholesaleWhitelist(wholesaleWhitelist.filter((_, i) => i !== idx))} className="text-red-500 font-bold hover:underline">
+                                                                ลบ
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ) : userRole === 'admin' && adminTab === 'settings' ? (
+                                            <div className="space-y-6">
+                                                <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
+                                                    <div className="flex items-center justify-between border-b pb-3">
+                                                        <div>
+                                                            <h3 className="font-extrabold text-slate-900 text-base">⚙️ ตั้งค่าหัวบิล และ ข้อมูลฟาร์ม</h3>
+                                                            <p className="text-slate-500 text-xs mt-0.5">ข้อมูลนี้จะนำไปแสดงบนหัวเอกสารใบเสร็จรับเงิน A4 และใบส่งสินค้า</p>
+                                                        </div>
+                                                        {isSettingsSaved && (
+                                                            <span className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-xs font-bold animate-pulse">
+                                                                ✓ บันทึกสำเร็จแล้ว!
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    <form onSubmit={(e) => {
+                                                        e.preventDefault();
+                                                        setIsSettingsSaved(true);
+                                                        setTimeout(() => setIsSettingsSaved(false), 3000);
+                                                    }} className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                                                        <div>
+                                                            <label className="font-bold text-slate-700 block mb-1">ชื่อฟาร์ม / บริษัท *</label>
+                                                            <input type="text" value={farmName} onChange={(e) => setFarmName(e.target.value)} className="w-full p-2 border rounded-xl" />
+                                                        </div>
+                                                        <div>
+                                                            <label className="font-bold text-slate-700 block mb-1">เลขประจำตัวผู้เสียภาษี (Tax ID)</label>
+                                                            <input type="text" value={taxId} onChange={(e) => setTaxId(e.target.value)} className="w-full p-2 border rounded-xl" />
+                                                        </div>
+                                                        <div className="md:col-span-2">
+                                                            <label className="font-bold text-slate-700 block mb-1">ที่อยู่ฟาร์ม *</label>
+                                                            <input type="text" value={farmAddress} onChange={(e) => setFarmAddress(e.target.value)} className="w-full p-2 border rounded-xl" />
+                                                        </div>
+                                                        <div>
+                                                            <label className="font-bold text-slate-700 block mb-1">เบอร์โทรศัพท์ติดต่อ</label>
+                                                            <input type="text" value={farmPhone} onChange={(e) => setFarmPhone(e.target.value)} className="w-full p-2 border rounded-xl" />
+                                                        </div>
+                                                        <div>
+                                                            <label className="font-bold text-slate-700 block mb-1">หมายเลข PromptPay</label>
+                                                            <input type="text" value={promptpayNo} onChange={(e) => setPromptpayNo(e.target.value)} className="w-full p-2 border rounded-xl" />
+                                                        </div>
+                                                        <div className="md:col-span-2">
+                                                            <label className="font-bold text-slate-700 block mb-1">รายละเอียดธนาคาร / เลขที่บัญชี</label>
+                                                            <input type="text" value={bankAccountNo} onChange={(e) => setBankAccountNo(e.target.value)} className="w-full p-2 border rounded-xl" />
+                                                        </div>
+                                                        
+                                                        <div className="md:col-span-2 pt-2 border-t flex justify-end">
+                                                            <button type="submit" className="px-6 py-2.5 bg-farm-800 text-white font-bold rounded-2xl shadow">
+                                                                บันทึกข้อมูลฟาร์ม
+                                                            </button>
+                                                        </div>
+                                                    </form>
+                                                </div>
+
+                                                {/* Staff Management Section */}
+                                                <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
+                                                    <div className="border-b pb-3">
+                                                        <h3 className="font-extrabold text-slate-900 text-base">👥 จัดการสิทธิ์และรหัส PIN พนักงาน (สูงสุด 5 คน)</h3>
+                                                        <p className="text-slate-500 text-xs mt-0.5">พนักงานจะเห็นเฉพาะ "งานวันนี้" ไม่เห็นรายงานรายได้หรือตั้งค่า</p>
+                                                    </div>
+
+                                                    <div className="bg-amber-50 p-3 rounded-2xl border border-amber-200 space-y-1 text-xs">
+                                                        <label className="font-bold text-amber-900">🔒 เปลี่ยนรหัส PIN ผู้ดูแลระบบ (Admin Master PIN):</label>
+                                                        <input 
+                                                            type="password" 
+                                                            maxLength="4"
+                                                            value={masterAdminPin}
+                                                            onChange={(e) => setMasterAdminPin(e.target.value)}
+                                                            className="w-32 p-2 border border-amber-300 rounded-xl font-mono text-center font-bold text-sm ml-2 bg-white"
+                                                        />
+                                                    </div>
+
+                                                    {staffList.length < 5 ? (
+                                                        <form onSubmit={(e) => {
+                                                            e.preventDefault();
+                                                            if (!newStaffName || !newStaffPin) return;
+                                                            if (newStaffPin.length !== 4) { alert('รหัส PIN ต้องมี 4 หลัก'); return; }
+                                                            setStaffList([...staffList, { id: Date.now(), name: newStaffName, pin: newStaffPin }]);
+                                                            setNewStaffName('');
+                                                            setNewStaffPin('');
+                                                        }} className="flex flex-col sm:flex-row items-center gap-2 bg-slate-50 p-3 rounded-2xl text-xs">
+                                                            <input 
+                                                                type="text" 
+                                                                placeholder="ชื่อพนักงาน" 
+                                                                required
+                                                                value={newStaffName}
+                                                                onChange={(e) => setNewStaffName(e.target.value)}
+                                                                className="w-full sm:flex-1 p-2 border rounded-xl"
+                                                            />
+                                                            <input 
+                                                                type="password" 
+                                                                maxLength="4"
+                                                                placeholder="PIN 4 หลัก" 
+                                                                required
+                                                                value={newStaffPin}
+                                                                onChange={(e) => setNewStaffPin(e.target.value)}
+                                                                className="w-full sm:w-36 p-2 border rounded-xl font-mono text-center"
+                                                            />
+                                                            <button type="submit" className="w-full sm:w-auto px-4 py-2 bg-farm-800 text-white font-bold rounded-xl whitespace-nowrap">
+                                                                + เพิ่มพนักงาน
+                                                            </button>
+                                                        </form>
+                                                    ) : (
+                                                        <p className="text-xs text-amber-800 font-bold bg-amber-50 p-2 rounded-xl">⚠️ เพิ่มพนักงานครบโควต้า 5 คนแล้ว</p>
+                                                    )}
+
+                                                    <div className="divide-y divide-slate-100 text-xs">
+                                                        {staffList.map((staff, idx) => (
+                                                            <div key={staff.id} className="py-2.5 flex items-center justify-between">
+                                                                <div>
+                                                                    <span className="font-bold text-slate-900">{idx + 1}. {staff.name}</span>
+                                                                    <span className="text-slate-400 font-mono ml-2">(PIN: ****)</span>
+                                                                </div>
+                                                                <button onClick={() => setStaffList(staffList.filter(s => s.id !== staff.id))} className="text-red-500 font-bold hover:underline">
+                                                                    ลบ
+                                                                </button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-4">
+                                                {orders.filter(o => adminTab === 'completed' ? o.status === 'completed' : o.status !== 'completed').map(order => (
+                                                    <div key={order.id} className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3">
+                                                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b pb-3">
+                                                            <div>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-extrabold text-slate-900 text-sm">{order.docNo}</span>
+                                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${order.isCredit ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                                                                        {order.isCredit ? 'เครดิต' : 'จ่ายสด/โอน'}
+                                                                    </span>
+                                                                </div>
+                                                                <p className="text-slate-400 text-[11px]">{order.date} • คุณ {order.customerName} ({order.phone})</p>
+                                                            </div>
+
+                                                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                                                                <select 
+                                                                    value={order.status} 
+                                                                    onChange={(e) => updateOrderStatus(order.id, e.target.value)}
+                                                                    className="text-xs p-2 border border-slate-300 rounded-xl font-bold bg-slate-50"
+                                                                >
+                                                                    <option value="pending">⏳ ได้รับออเดอร์</option>
+                                                                    <option value="packing">🥬 กำลังแพ็คผักสด</option>
+                                                                    <option value="shipping">🚚 กำลังจัดส่ง</option>
+                                                                    <option value="completed">✅ ส่งสำเร็จแล้ว</option>
+                                                                </select>
+
+                                                                <button 
+                                                                    onClick={() => setSelectedOrderDetails(order)} 
+                                                                    className="px-3 py-2 bg-farm-800 text-white text-xs font-bold rounded-xl shadow whitespace-nowrap"
+                                                                >
+                                                                    📄 พิมพ์บิล A4
+                                                                </button>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Order Item List & Map link */}
+                                                        <div className="text-xs space-y-1">
+                                                            {order.items.map((it, idx) => (
+                                                                <div key={idx} className="flex justify-between text-slate-600">
+                                                                    <span>• {it.name} x {it.qty} {it.unit}</span>
+                                                                    <span>฿{it.price * it.qty}</span>
+                                                                </div>
+                                                            ))}
+                                                            <div className="flex justify-between font-extrabold text-slate-900 pt-1 border-t">
+                                                                <span>ยอดเงินรวม</span>
+                                                                <span className="text-farm-800">฿{order.total}</span>
+                                                            </div>
+                                                        </div>
+
+                                                        {order.address && (
+                                                            <p className="text-[11px] text-slate-500 bg-slate-50 p-2 rounded-xl">
+                                                                📍 <strong>ที่อยู่ส่ง:</strong> {order.address} {order.mapsUrl && <a href={order.mapsUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline ml-1">เปิดแผนที่</a>}
+                                                            </p>
+                                                        )}
+
+                                                        {/* Proof Upload */}
+                                                        <div className="pt-2 border-t flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
+                                                            <div className="w-full sm:w-auto">
+                                                                <label className="font-bold text-slate-700 block mb-0.5">📸 อัปโหลดรูปหลักฐานการจัดส่ง:</label>
+                                                                <input 
+                                                                    type="file" 
+                                                                    accept="image/*" 
+                                                                    onChange={(e) => {
+                                                                        const file = e.target.files[0];
+                                                                        if (file) {
+                                                                            const reader = new FileReader();
+                                                                            reader.onloadend = () => {
+                                                                                setOrders(orders.map(o => o.id === order.id ? { ...o, proofImage: reader.result } : o));
+                                                                            };
+                                                                            reader.readAsDataURL(file);
+                                                                        }
+                                                                    }}
+                                                                    className="text-[10px] text-slate-500"
+                                                                />
+                                                            </div>
+                                                            {order.slipImage && (
+                                                                <a href={order.slipImage} target="_blank" rel="noreferrer" className="text-blue-600 font-bold hover:underline text-[11px]">
+                                                                    🖼️ ดูสลิปโอนเงินลูกค้า
+                                                                </a>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </main>
+
+                    {}
+                    {selectedOrderDetails && (
+                        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+                            <div className="bg-white w-full max-w-3xl rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl my-auto">
+                                <div className="flex justify-between items-center no-print border-b pb-3">
+                                    <h3 className="font-extrabold text-slate-900 text-base">📄 ตัวอย่างเอกสาร A4</h3>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => window.print()} className="px-4 py-2 bg-farm-800 text-white font-bold text-xs rounded-xl shadow">
+                                            🖨️ พิมพ์ / บันทึก PDF
+                                        </button>
+                                        <button onClick={() => setSelectedOrderDetails(null)} className="px-3 py-2 bg-slate-200 text-slate-700 font-bold text-xs rounded-xl">
+                                            ปิด
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Printable Area */}
+                                <div id="printable-area" className="space-y-6 text-slate-800 text-xs">
+                                    {/* Bill Header */}
+                                    <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4">
+                                        <div>
+                                            <h1 className="text-xl font-extrabold text-slate-900">{farmName}</h1>
+                                            <p className="mt-1">{farmAddress}</p>
+                                            <p>โทร: {farmPhone} | เลขประจำตัวผู้เสียภาษี: {taxId}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <h2 className="text-lg font-black text-slate-900">
+                                                {selectedOrderDetails.isCredit ? 'ใบส่งสินค้า / ใบแจ้งหนี้' : 'ใบเสร็จรับเงิน'}
+                                            </h2>
+                                            <p className="font-mono font-bold mt-1 text-slate-600">{selectedOrderDetails.docNo}</p>
+                                            <p className="text-[11px] text-slate-500">วันที่: {selectedOrderDetails.date}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Customer Info */}
+                                    <div className="bg-slate-50 p-3 rounded-xl space-y-1">
+                                        <p><strong>ชื่อลูกค้า / ร้านค้า:</strong> คุณ {selectedOrderDetails.customerName}</p>
+                                        <p><strong>เบอร์โทรศัพท์:</strong> {selectedOrderDetails.phone}</p>
+                                        <p><strong>ที่อยู่จัดส่ง:</strong> {selectedOrderDetails.address}</p>
+                                    </div>
+
+                                    {/* Items Table */}
+                                    <table className="w-full text-left border-collapse">
+                                        <thead>
+                                            <tr className="border-b-2 border-slate-300 bg-slate-100">
+                                                <th className="py-2 px-2">ลำดับ</th>
+                                                <th className="py-2 px-2">รายการผักปลอดสาร / สินค้า</th>
+                                                <th className="py-2 px-2 text-center">จำนวน</th>
+                                                <th className="py-2 px-2 text-right">ราคา/หน่วย</th>
+                                                <th className="py-2 px-2 text-right">จำนวนเงิน</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y">
+                                            {selectedOrderDetails.items.map((it, idx) => (
+                                                <tr key={idx}>
+                                                    <td className="py-2 px-2 text-center">{idx + 1}</td>
+                                                    <td className="py-2 px-2 font-bold">{it.name}</td>
+                                                    <td className="py-2 px-2 text-center">{it.qty} {it.unit}</td>
+                                                    <td className="py-2 px-2 text-right">฿{it.price}</td>
+                                                    <td className="py-2 px-2 text-right font-bold">฿{it.price * it.qty}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                        <tfoot>
+                                            <tr className="border-t-2 border-slate-900 font-bold">
+                                                <td colSpan="4" className="py-2 px-2 text-right">ยอดเงินสุทธิ:</td>
+                                                <td className="py-2 px-2 text-right text-base">฿{selectedOrderDetails.total}</td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+
+                                    {/* Thai Baht Text */}
+                                    <div className="bg-slate-100 p-2.5 rounded-xl text-center font-bold">
+                                        ({bahtText(selectedOrderDetails.total)})
+                                    </div>
+
+                                    {/* Signatures */}
+                                    <div className="grid grid-cols-3 gap-4 pt-10 text-center">
+                                        <div className="space-y-6">
+                                            <div className="border-b border-dashed border-slate-400 w-4/5 mx-auto"></div>
+                                            <p className="text-[11px] font-bold">
+                                                {selectedOrderDetails.isCredit ? 'ผู้รับสินค้า / ลูกค้า' : 'ผู้จ่ายเงิน / ลูกค้า'}
+                                                <br/>
+                                                <span className="text-[10px] text-slate-400 font-normal">วันที่ ...../...../..........</span>
+                                            </p>
+                                        </div>
+                                        <div className="space-y-6">
+                                            <div className="border-b border-dashed border-slate-400 w-4/5 mx-auto"></div>
+                                            <p className="text-[11px] font-bold">
+                                                พนักงานจัดส่งสินค้า
+                                                <br/>
+                                                <span className="text-[10px] text-slate-400 font-normal">วันที่ ...../...../..........</span>
+                                            </p>
+                                        </div>
+                                        <div className="space-y-6">
+                                            <div className="border-b border-dashed border-slate-400 w-4/5 mx-auto"></div>
+                                            <p className="text-[11px] font-bold">
+                                                {selectedOrderDetails.isCredit ? 'ผู้ส่งสินค้า / เกื้อบุญฟาร์ม' : 'ผู้รับเงิน / เกื้อบุญฟาร์ม'}
+                                                <br/>
+                                                <span className="text-[10px] text-slate-400 font-normal">วันที่ ...../...../..........</span>
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Bottom Navigation for Mobile */}
+                    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 md:hidden z-20">
+                        <div className="grid grid-cols-3 text-center py-2 text-[11px] font-bold">
+                            <button onClick={() => setView('store')} className={`space-y-0.5 ${view === 'store' ? 'text-farm-800' : 'text-slate-400'}`}>
+                                <div className="text-base">🥬</div>
+                                <span>สั่งผักสด</span>
+                            </button>
+                            <button onClick={() => setView('tracking')} className={`space-y-0.5 ${view === 'tracking' ? 'text-farm-800' : 'text-slate-400'}`}>
+                                <div className="text-base">🚚</div>
+                                <span>ติดตาม</span>
+                            </button>
+                            <button onClick={() => setView('backoffice')} className={`space-y-0.5 ${view === 'backoffice' ? 'text-farm-800' : 'text-slate-400'}`}>
+                                <div className="text-base">👤🔧</div>
+                                <span>ปฏิบัติการ</span>
+                            </button>
+                        </div>
+                    </nav>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
