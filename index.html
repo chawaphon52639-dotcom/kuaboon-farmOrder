@@ -64,13 +64,13 @@
 
     <script type="text/babel">
         const firebaseConfig = {
-            apiKey: "AIzaSyDw4qM4mjczsYKjcS-4tij2tJfmxD3GrBU",
-            authDomain: "kuaboon-farmorder.firebaseapp.com",
-            projectId: "kuaboon-farmorder",
-            storageBucket: "kuaboon-farmorder.firebasestorage.app",
-            messagingSenderId: "563219518499",
-            appId: "1:563219518499:web:f249262d6ad4474e158d96",
-            measurementId: "G-D17BQ5L0P6"
+            apiKey: "AIzaSyBsFU3aarkhi13dzDU5qYgt-4Mv0rJ5PTs",
+            authDomain: "orderkueaboon.firebaseapp.com",
+            projectId: "orderkueaboon",
+            storageBucket: "orderkueaboon.firebasestorage.app",
+            messagingSenderId: "621982075080",
+            appId: "1:621982075080:web:a89c47c429eba1718c7dfd",
+            measurementId: "G-WGKJYYSCNW"
         };
 
         if (!firebase.apps.length) {
@@ -79,7 +79,7 @@
         const db = firebase.firestore();
         const storage = firebase.storage();
 
-        // Helper: Convert DataURL to Firebase Storage URL
+        // Helper: Convert DataURL / File to Firebase Storage URL
         async function uploadImageToStorage(dataUrl, folderName) {
             if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl;
             try {
@@ -90,11 +90,10 @@
                 return downloadUrl;
             } catch (error) {
                 console.error("Storage upload error:", error);
-                return dataUrl;
+                throw error;
             }
         }
 
-        // Helper: Thai Baht Text conversion
         function bahtText(num) {
             if (!num || isNaN(num) || num === 0) return 'ศูนย์บาทถ้วน';
             num = Math.round(num * 100) / 100;
@@ -151,12 +150,11 @@
 
         function App() {
             const [view, setView] = React.useState('store');
-            const [products, setProducts] = React.useState([]);
+            const [products, setProducts] = React.useState(INITIAL_PRODUCTS);
             const [cart, setCart] = React.useState([]);
             const [customerType, setCustomerType] = React.useState('retail');
             const [selectedCategory, setSelectedCategory] = React.useState('all');
             const [orders, setOrders] = React.useState([]);
-            const [isLoading, setIsLoading] = React.useState(true);
             const [isSubmitting, setIsSubmitting] = React.useState(false);
             const [isFirebaseConnected, setIsFirebaseConnected] = React.useState(false);
 
@@ -167,6 +165,9 @@
             const [custMapsUrl, setCustMapsUrl] = React.useState('');
             const [isCreditOrder, setIsCreditOrder] = React.useState(false);
             const [slipPreview, setSlipPreview] = React.useState('');
+
+            // Notification Modal State (Replacing alert)
+            const [toastModal, setToastModal] = React.useState({ show: false, title: '', message: '', type: 'info' });
 
             // Backoffice & Role state
             const [adminPin, setAdminPin] = React.useState('');
@@ -195,27 +196,30 @@
                 { id: '1', phone: '0891234567', name: 'ร้านสลัดคุณน้อง' },
                 { id: '2', phone: '0819876543', name: 'ร้านอาหารเกื้อบุญ' }
             ]);
-            const [newWholesalePhone, setNewWholesalePhone] = React.useState('');
-            const [newWholesaleName, setNewWholesaleName] = React.useState('');
+            const [newStaffName, setNewStaffName] = React.useState('');
+            const [newStaffPin, setNewStaffPin] = React.useState('');
 
-            // Modals & Drawers
+            // Modals
             const [selectedOrderDetails, setSelectedOrderDetails] = React.useState(null);
             const [showCartDrawer, setShowCartDrawer] = React.useState(false);
 
-            React.useEffect(() => {
-                setIsLoading(true);
+            const showToast = (title, message, type = 'info') => {
+                setToastModal({ show: true, title, message, type });
+            };
 
+            React.useEffect(() => {
                 // 1. Sync Products
                 const unsubProducts = db.collection('products').onSnapshot(snapshot => {
                     setIsFirebaseConnected(true);
                     if (snapshot.empty) {
-                        INITIAL_PRODUCTS.forEach(p => db.collection('products').doc(p.id).set(p));
+                        INITIAL_PRODUCTS.forEach(p => db.collection('products').doc(p.id).set(p).catch(e => console.warn(e)));
+                        setProducts(INITIAL_PRODUCTS);
                     } else {
                         const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                         setProducts(items);
                     }
                 }, err => {
-                    console.error("Firebase Products Error:", err);
+                    console.warn("Firebase Products Sync Error:", err);
                     setIsFirebaseConnected(false);
                 });
 
@@ -224,16 +228,13 @@
                     setIsFirebaseConnected(true);
                     const ords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     setOrders(ords);
-                    setIsLoading(false);
                 }, err => {
-                    console.error("Firebase Orders Error:", err);
+                    console.warn("Firebase Orders Sync Error:", err);
                     setIsFirebaseConnected(false);
-                    setIsLoading(false);
                 });
 
                 // 3. Sync Settings
                 const unsubSettings = db.collection('settings').doc('farm_config').onSnapshot(doc => {
-                    setIsFirebaseConnected(true);
                     if (doc.exists) {
                         const data = doc.data();
                         if (data.farmName) setFarmName(data.farmName);
@@ -246,21 +247,12 @@
                         if (data.masterAdminPin) setMasterAdminPin(data.masterAdminPin);
                         if (data.staffList) setStaffList(data.staffList);
                     }
-                }, err => console.error("Firebase Settings Error:", err));
-
-                // 4. Sync Whitelist
-                const unsubWhitelist = db.collection('whitelist').onSnapshot(snapshot => {
-                    if (!snapshot.empty) {
-                        const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                        setWholesaleWhitelist(list);
-                    }
-                }, err => console.error("Firebase Whitelist Error:", err));
+                }, err => console.warn("Firebase Settings Sync Error:", err));
 
                 return () => {
                     unsubProducts();
                     unsubOrders();
                     unsubSettings();
-                    unsubWhitelist();
                 };
             }, []);
 
@@ -309,10 +301,10 @@
                             const url = `https://www.google.com/maps?q=${position.coords.latitude},${position.coords.longitude}`;
                             setCustMapsUrl(url);
                         },
-                        () => alert('ไม่สามารถดึงพิกัด GPS ได้ กรุณาวางลิงก์ Google Maps โดยตรง')
+                        () => showToast('📍 ไม่สามารถดึง GPS ได้', 'กรุณาวางลิงก์ Google Maps โดยตรงในช่องใส่พิกัด', 'error')
                     );
                 } else {
-                    alert('เบราว์เซอร์ไม่รองรับการดึง GPS');
+                    showToast('⚠️ ไม่รองรับ GPS', 'เบราว์เซอร์ของคุณน้าไม่รองรับการดึงพิกัดอัตโนมัติ', 'error');
                 }
             };
 
@@ -323,13 +315,13 @@
                 if (isCreditOrder || customerType === 'wholesale') {
                     const isApproved = wholesaleWhitelist.some(w => w.phone.replace(/[^0-9]/g, '') === custPhone.replace(/[^0-9]/g, ''));
                     if (!isApproved && isCreditOrder) {
-                        alert('⚠️ เบอร์โทรศัพท์นี้ยังไม่ได้รับสิทธิ์สั่งซื้อแบบ "เครดิต" กรุณาเลือกชำระแบบโอนเงิน หรือติดต่อผู้ดูแลระบบ');
+                        showToast('⚠️ ไม่ได้รับสิทธิ์เครดิต', 'เบอร์โทรศัพท์นี้ยังไม่ได้รับอนุมัติสั่งซื้อแบบเครดิต กรุณาเลือกชำระแบบโอนเงินก่อนครับ', 'error');
                         return;
                     }
                 }
 
                 if (!isCreditOrder && !slipPreview) {
-                    alert('⚠️ กรุณาแนบสลิปการโอนเงินชำระสินค้า');
+                    showToast('📸 กรุณาแนบสลิป', 'กรุณาแนบรูปสลิปการโอนเงินเพื่อยืนยันการชำระเงิน', 'error');
                     return;
                 }
 
@@ -366,6 +358,7 @@
 
                     await db.collection('orders').doc(orderId).set(newOrder);
 
+                    // Update stock
                     const batch = db.batch();
                     cart.forEach(cItem => {
                         const pRef = db.collection('products').doc(cItem.id);
@@ -386,9 +379,10 @@
                     }
 
                     setView('tracking');
+                    showToast('🎉 สั่งซื้อผักสดสำเร็จ!', `ส่งรายการคำสั่งซื้อเลขที่ ${newDocNo} เข้าสู่ระบบเรียบร้อยแล้ว`, 'success');
                 } catch (err) {
                     console.error("Order error:", err);
-                    alert("เกิดข้อผิดพลาดในการบันทึกออเดอร์ กรุณาลองใหม่อีกครั้ง");
+                    showToast('❌ เกิดข้อผิดพลาด', 'ไม่สามารถบันทึกออเดอร์ได้ กรุณาตรวจสอบการตั้งค่า Firebase Firestore', 'error');
                 } finally {
                     setIsSubmitting(false);
                 }
@@ -401,6 +395,7 @@
                     setActiveStaffName('ผู้ดูแลระบบ (Admin)');
                     setIsAdminLoggedIn(true);
                     setAdminPin('');
+                    showToast('👑 เข้าสู่ระบบสำเร็จ', 'ยินดีต้อนรับผู้ดูแลระบบเกื้อบุญฟาร์ม', 'success');
                 } else {
                     const foundStaff = staffList.find(s => s.pin === adminPin);
                     if (foundStaff) {
@@ -409,8 +404,9 @@
                         setIsAdminLoggedIn(true);
                         setAdminTab('active');
                         setAdminPin('');
+                        showToast('👷 เข้าสู่ระบบพนักงาน', `ยินดีต้อนรับคุณ ${foundStaff.name}`, 'success');
                     } else {
-                        alert('รหัส PIN ไม่ถูกต้อง (Admin PIN: 1234 หรือ PIN พนักงานที่ตั้งไว้)');
+                        showToast('🔑 รหัส PIN ไม่ถูกต้อง', 'กรุณาตรวจสอบรหัส PIN 4 หลัก (Admin PIN: 1234 หรือ PIN พนักงาน)', 'error');
                     }
                 }
             };
@@ -418,6 +414,7 @@
             const updateOrderStatus = async (orderId, newStatus) => {
                 try {
                     await db.collection('orders').doc(orderId).update({ status: newStatus });
+                    showToast('✅ อัปเดตสถานะสำเร็จ', 'สถานะออเดอร์ถูกบันทึกขึ้นระบบคลาวด์แล้ว', 'success');
                 } catch (err) {
                     console.error("Status update error:", err);
                 }
@@ -430,8 +427,10 @@
                     try {
                         const url = await uploadImageToStorage(reader.result, 'delivery_proofs');
                         await db.collection('orders').doc(orderId).update({ proofImage: url });
+                        showToast('📸 บันทึกรูปจัดส่งสำเร็จ', 'อัปโหลดรูปหลักฐานการจัดส่งเรียบร้อยแล้ว', 'success');
                     } catch (err) {
                         console.error("Proof upload error:", err);
+                        showToast('❌ อัปโหลดรูปจัดส่งไม่สำเร็จ', 'กรุณาตรวจสอบการตั้งค่า Firebase Storage Rules', 'error');
                     }
                 };
                 reader.readAsDataURL(file);
@@ -442,12 +441,13 @@
                 const reader = new FileReader();
                 reader.onloadend = async () => {
                     try {
+                        showToast('⏳ กำลังอัปโหลด...', 'กำลังส่งรูปผักสดขึ้นคลาวด์ Firebase Storage...', 'info');
                         const url = await uploadImageToStorage(reader.result, 'products');
                         await db.collection('products').doc(productId).update({ image: url });
-                        alert('✅ อัปเดตรูปภาพผักเรียบร้อยแล้ว');
+                        showToast('🥬 เปลี่ยนรูปผักสดสำเร็จ!', 'รูปภาพผักชนิดนี้ถูกเปลี่ยนและแสดงผลหน้าร้านทันที', 'success');
                     } catch (err) {
-                        console.error("Product image error:", err);
-                        alert('❌ ไม่สามารถอัปโหลดรูปผักได้');
+                        console.error("Product image upload error:", err);
+                        showToast('❌ ไม่สามารถเปลี่ยนรูปผักได้', 'โปรดตรวจสอบสิทธิ์ Firebase Storage Rules ใน Firebase Console', 'error');
                     }
                 };
                 reader.readAsDataURL(file);
@@ -476,10 +476,10 @@
                     };
 
                     await db.collection('settings').doc('farm_config').set(settingsData, { merge: true });
-                    alert('✅ บันทึกข้อมูลฟาร์มขึ้น Firebase เรียบร้อยแล้ว!');
+                    showToast('💾 บันทึกตั้งค่าสำเร็จ', 'ข้อมูลฟาร์มและรูป QR Code อัปเดตขึ้นคลาวด์เรียบร้อยแล้ว', 'success');
                 } catch (err) {
                     console.error("Save settings error:", err);
-                    alert('❌ ไม่สามารถบันทึกข้อมูลได้ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต');
+                    showToast('❌ บันทึกไม่สำเร็จ', 'กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตหรือสิทธิ์ Firebase Rules', 'error');
                 } finally {
                     setIsSavingSettings(false);
                 }
@@ -487,7 +487,7 @@
 
             const handleExportCSV = () => {
                 if (orders.length === 0) {
-                    alert('ไม่มีข้อมูลออเดอร์สำหรับส่งออก');
+                    showToast('⚠️ ไม่มีข้อมูล', 'ยังไม่มีข้อมูลออเดอร์สำหรับส่งออกเป็นไฟล์ CSV', 'info');
                     return;
                 }
                 let csvContent = "\uFEFF";
@@ -502,10 +502,12 @@
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
+                showToast('📥 ส่งออก CSV สำเร็จ', 'ดาวน์โหลดไฟล์รายงานยอดขายเรียบร้อยแล้ว', 'success');
             };
 
             return (
                 <div className="min-h-screen bg-slate-50 text-slate-800 pb-20 md:pb-8">
+                    {}
                     {/* Header Bar */}
                     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
                         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -520,23 +522,27 @@
                             </div>
 
                             <div className="flex items-center gap-2">
-                                {/* Firebase Connection Indicator */}
+                                {/* Firebase Connection Indicator Button */}
                                 <button 
                                     type="button"
-                                    onClick={() => alert(isFirebaseConnected 
-                                        ? "🟢 เชื่อมต่อระบบคลาวด์ Firebase สำเร็จเรียบร้อยแล้ว!\n\nข้อมูลออเดอร์ สต็อกผัก และการตั้งค่าทั้งหมดจะถูกบันทึกขึ้นคลาวด์แบบ Real-time" 
-                                        : "🔴 ไม่พบการเชื่อมต่อกับ Firebase\n\nกรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต หรือตรวจสอบคีย์ firebaseConfig ในไฟล์ index.html")}
+                                    onClick={() => showToast(
+                                        isFirebaseConnected ? '🟢 เชื่อมต่อคลาวด์ Firebase แล้ว' : '🔴 ยังไม่พบการเชื่อมต่อ Firestore',
+                                        isFirebaseConnected 
+                                            ? 'ระบบเชื่อมต่อโปรเจกต์ orderkueaboon สำเร็จเรียบร้อย ออเดอร์และสต็อกจะซิงค์สดๆ ทันที' 
+                                            : 'วิธีแก้ไข:\n1. เข้า console.firebase.google.com เลือก orderkueaboon\n2. ไปที่ Firestore Database แล้วกด "Create database"\n3. ไปที่แท็บ Rules ตั้งค่า allow read, write: if true;',
+                                        isFirebaseConnected ? 'success' : 'error'
+                                    )}
                                     className={`px-3 py-1.5 rounded-full text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-sm ${
                                         isFirebaseConnected 
                                         ? 'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100' 
                                         : 'bg-rose-50 text-rose-800 border border-rose-300 hover:bg-rose-100 animate-pulse'
                                     }`}
                                 >
-                                    <span className={`relative flex h-2 w-2`}>
+                                    <span className="relative flex h-2 w-2">
                                         <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isFirebaseConnected ? 'bg-emerald-400' : 'bg-rose-400'}`}></span>
                                         <span className={`relative inline-flex rounded-full h-2 w-2 ${isFirebaseConnected ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
                                     </span>
-                                    <span className="hidden sm:inline">{isFirebaseConnected ? 'เชื่อมต่อ Firebase แล้ว ☁️' : 'ไม่ได้เชื่อมต่อ Firebase ⚠️'}</span>
+                                    <span className="hidden sm:inline">{isFirebaseConnected ? 'เชื่อมต่อ Firebase แล้ว ☁️' : 'ยังไม่ได้กด Create Database ⚠️'}</span>
                                     <span className="sm:hidden">{isFirebaseConnected ? 'Firebase 🟢' : 'Firebase 🔴'}</span>
                                 </button>
 
@@ -565,16 +571,41 @@
                         </div>
                     </header>
 
+                    {/* Notification Toast Modal */}
+                    {toastModal.show && (
+                        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+                            <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl border text-center animate-fade-in">
+                                <div className={`w-14 h-14 rounded-2xl mx-auto flex items-center justify-center text-2xl font-bold ${
+                                    toastModal.type === 'success' ? 'bg-emerald-100 text-emerald-800' :
+                                    toastModal.type === 'error' ? 'bg-rose-100 text-rose-800' : 'bg-blue-100 text-blue-800'
+                                }`}>
+                                    {toastModal.type === 'success' ? '✅' : toastModal.type === 'error' ? '❌' : '💡'}
+                                </div>
+                                <div className="space-y-1">
+                                    <h3 className="font-extrabold text-slate-900 text-base">{toastModal.title}</h3>
+                                    <p className="text-slate-600 text-xs leading-relaxed whitespace-pre-line">{toastModal.message}</p>
+                                </div>
+                                <button 
+                                    onClick={() => setToastModal({ ...toastModal, show: false })}
+                                    className="w-full py-2.5 bg-slate-900 text-white rounded-xl font-bold text-xs shadow hover:bg-slate-800"
+                                >
+                                    ตกลง / ปิดหน้าต่าง
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {}
                     {/* Main Content Area */}
                     <main className="max-w-6xl mx-auto px-4 pt-4">
-                        {}
+                        {/* Storefront View */}
                         {view === 'store' && (
                             <div className="space-y-6">
                                 {/* Top Banner */}
                                 <div className="bg-gradient-to-r from-farm-800 to-emerald-600 text-white p-6 rounded-3xl shadow-lg relative overflow-hidden">
                                     <div className="relative z-10 space-y-2 max-w-xl">
                                         <span className="bg-white/20 text-white text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider backdrop-blur-md">
-                                            🌿 ผักสลัดสด ปปลอดสารพิษ 100%
+                                            🌿 ผักสลัดสด ปลดสารพิษ 100%
                                         </span>
                                         <h2 className="text-2xl sm:text-3xl font-extrabold leading-tight">สด กรอบ ส่งตรงจากแปลงทุกวัน</h2>
                                         <p className="text-emerald-100 text-xs sm:text-sm">
@@ -694,6 +725,7 @@
                         )}
 
                         {}
+                        {/* Floating Cart Button */}
                         {cart.length > 0 && view === 'store' && (
                             <div className="fixed bottom-16 sm:bottom-6 right-4 left-4 max-w-md mx-auto z-30">
                                 <button 
@@ -716,13 +748,14 @@
                             </div>
                         )}
 
+                        {/* Cart Drawer Modal */}
                         {showCartDrawer && (
                             <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex justify-end">
                                 <div className="bg-white w-full max-w-lg h-full overflow-y-auto p-5 space-y-6 flex flex-col justify-between">
                                     <div className="space-y-5">
                                         <div className="flex items-center justify-between border-b pb-3">
                                             <h3 className="font-extrabold text-slate-900 text-lg">🛒 ตะกร้าสินค้าและชำระเงิน</h3>
-                                            <button onClick={() => setShowCartDrawer(false)} className="w-8 h-8 bg-slate-100 rounded-full font-bold text-slate-500">✕</button>
+                                            <button onClick={() => setShowCartDrawer(false)} className="w-8 h-8 bg-slate-100 rounded-full font-bold text-slate-500 hover:bg-slate-200">✕</button>
                                         </div>
 
                                         {/* Cart items */}
@@ -735,7 +768,7 @@
                                                     </div>
                                                     <div className="flex items-center gap-2">
                                                         <span className="font-extrabold text-slate-900">฿{getItemPrice(item) * item.qty}</span>
-                                                        <button onClick={() => updateCartQty(item.id, -1)} className="text-red-500 font-bold px-1">ลบ</button>
+                                                        <button onClick={() => updateCartQty(item.id, -1)} className="text-rose-500 font-bold px-1">ลบ</button>
                                                     </div>
                                                 </div>
                                             ))}
@@ -753,7 +786,7 @@
                                                     placeholder="เช่น คุณสมชาย (ร้านสลัด)" 
                                                     value={custName}
                                                     onChange={e => setCustName(e.target.value)}
-                                                    className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none"
+                                                    className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none focus:border-farm-800"
                                                 />
                                             </div>
 
@@ -765,7 +798,7 @@
                                                     placeholder="0812345678" 
                                                     value={custPhone}
                                                     onChange={e => setCustPhone(e.target.value)}
-                                                    className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none"
+                                                    className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none focus:border-farm-800"
                                                 />
                                             </div>
 
@@ -777,7 +810,7 @@
                                                     placeholder="บ้านเลขที่ ถนน ซอย จุดสังเกต" 
                                                     value={custAddress}
                                                     onChange={e => setCustAddress(e.target.value)}
-                                                    className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none"
+                                                    className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none focus:border-farm-800"
                                                 ></textarea>
                                             </div>
 
@@ -793,7 +826,7 @@
                                                     placeholder="https://maps.google.com/..." 
                                                     value={custMapsUrl}
                                                     onChange={e => setCustMapsUrl(e.target.value)}
-                                                    className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none text-[11px]"
+                                                    className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none text-[11px] focus:border-farm-800"
                                                 />
                                             </div>
 
@@ -871,6 +904,7 @@
                         )}
 
                         {}
+                        {/* Order Tracking View */}
                         {view === 'tracking' && (
                             <div className="space-y-4 max-w-3xl mx-auto">
                                 <h2 className="font-extrabold text-slate-900 text-lg">🚚 ติดตามสถานะออเดอร์จัดส่ง</h2>
@@ -917,6 +951,7 @@
                         )}
 
                         {}
+                        {/* Backoffice View */}
                         {view === 'backoffice' && (
                             <div className="space-y-6">
                                 {!isAdminLoggedIn ? (
@@ -1004,7 +1039,7 @@
                                             )}
                                         </div>
 
-                                        {}
+                                        {/* Inventory Tab */}
                                         {adminTab === 'inventory' && userRole === 'admin' && (
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                                                 <h3 className="font-extrabold text-slate-900 text-base">🥬 จัดการสต็อกคลังผักสดและรูปภาพ</h3>
@@ -1019,7 +1054,7 @@
                                                                     <p className="font-extrabold text-slate-900">{p.name}</p>
                                                                     <p className="text-slate-400">฿{p.priceRetail} / {p.unit}</p>
                                                                     <label className="cursor-pointer text-[11px] font-bold text-farm-800 hover:underline inline-flex items-center gap-1 mt-1 bg-farm-50 px-2.5 py-1 rounded-lg border border-farm-200">
-                                                                        <span>📷 เปลี่ยนรูปผัก</span>
+                                                                        <span>📷 เปลี่ยนรูปผักสด</span>
                                                                         <input 
                                                                             type="file" 
                                                                             accept="image/*" 
@@ -1031,6 +1066,15 @@
                                                             </div>
                                                             <div className="flex items-center gap-2">
                                                                 <span className="text-slate-500 font-bold">สต็อก:</span>
+                                                                <button 
+                                                                    onClick={() => {
+                                                                        const newStock = Math.max(0, p.stock - 1);
+                                                                        db.collection('products').doc(p.id).update({ stock: newStock });
+                                                                    }}
+                                                                    className="w-8 h-8 bg-slate-100 rounded-xl font-extrabold text-slate-700 hover:bg-slate-200"
+                                                                >
+                                                                    -
+                                                                </button>
                                                                 <input 
                                                                     type="number"
                                                                     value={p.stock}
@@ -1040,6 +1084,14 @@
                                                                     }}
                                                                     className="w-20 p-2 border rounded-xl font-bold text-center bg-slate-50"
                                                                 />
+                                                                <button 
+                                                                    onClick={() => {
+                                                                        db.collection('products').doc(p.id).update({ stock: p.stock + 1 });
+                                                                    }}
+                                                                    className="w-8 h-8 bg-slate-100 rounded-xl font-extrabold text-slate-700 hover:bg-slate-200"
+                                                                >
+                                                                    +
+                                                                </button>
                                                                 <span className="font-bold text-slate-500">{p.unit}</span>
                                                             </div>
                                                         </div>
@@ -1048,7 +1100,7 @@
                                             </div>
                                         )}
 
-                                        {}
+                                        {/* Reports Tab */}
                                         {adminTab === 'reports' && userRole === 'admin' && (
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                                                 <div className="flex justify-between items-center border-b pb-3">
@@ -1071,6 +1123,7 @@
                                         )}
 
                                         {}
+                                        {/* Settings Tab */}
                                         {adminTab === 'settings' && userRole === 'admin' && (
                                             <div className="space-y-6">
                                                 {/* Farm Info Form */}
@@ -1078,7 +1131,7 @@
                                                     <div className="flex items-center justify-between border-b pb-3">
                                                         <h3 className="font-extrabold text-slate-900 text-base">⚙️ ตั้งค่าข้อมูลฟาร์ม และการชำระเงิน</h3>
                                                         <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${isFirebaseConnected ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
-                                                            {isFirebaseConnected ? '🟢 เชื่อมต่อ Firebase เรียบร้อย' : '🔴 ยังไม่เชื่อมต่อ Firebase'}
+                                                            {isFirebaseConnected ? '🟢 เชื่อมต่อ Firebase เรียบร้อย' : '🔴 ยังไม่ได้เปิด Firestore'}
                                                         </span>
                                                     </div>
 
@@ -1105,7 +1158,7 @@
                                                         </div>
 
                                                         <div>
-                                                            <label className="font-bold text-slate-700 block mb-1">📸 อัปโหลดรูป QR Code พร้อมเพย์หน้าร้าน (ถ้ามี)</label>
+                                                            <label className="font-bold text-slate-700 block mb-1">📸 อัปโหลดรูป QR Code พร้อมเพย์หน้าร้านค้า</label>
                                                             <div className="flex items-center gap-3 bg-slate-50 p-2.5 rounded-xl border">
                                                                 {customQrImage ? (
                                                                     <img src={customQrImage} alt="QR Code Preview" className="w-14 h-14 object-cover rounded-lg border bg-white p-1" />
@@ -1160,12 +1213,13 @@
                                                         <form onSubmit={e => {
                                                             e.preventDefault();
                                                             if (!newStaffName || !newStaffPin) return;
-                                                            if (newStaffPin.length !== 4) { alert('รหัส PIN ต้องมี 4 หลัก'); return; }
+                                                            if (newStaffPin.length !== 4) { showToast('⚠️ แจ้งเตือน', 'รหัส PIN พนักงานต้องมี 4 หลัก', 'error'); return; }
                                                             const updated = [...staffList, { id: Date.now(), name: newStaffName, pin: newStaffPin }];
                                                             setStaffList(updated);
                                                             db.collection('settings').doc('farm_config').set({ staffList: updated }, { merge: true });
                                                             setNewStaffName('');
                                                             setNewStaffPin('');
+                                                            showToast('✅ เพิ่มพนักงานสำเร็จ', `เพิ่มพนักงานคุณ ${newStaffName} เรียบร้อยแล้ว`, 'success');
                                                         }} className="flex flex-col sm:flex-row items-center gap-2 bg-slate-50 p-3 rounded-2xl text-xs">
                                                             <input 
                                                                 type="text" 
@@ -1201,7 +1255,8 @@
                                                                     const updated = staffList.filter(s => s.id !== staff.id);
                                                                     setStaffList(updated);
                                                                     db.collection('settings').doc('farm_config').set({ staffList: updated }, { merge: true });
-                                                                }} className="text-red-500 font-bold hover:underline">
+                                                                    showToast('🗑️ ลบพนักงาน', 'ลบข้อมูลพนักงานเรียบร้อยแล้ว', 'info');
+                                                                }} className="text-rose-500 font-bold hover:underline">
                                                                     ลบ
                                                                 </button>
                                                             </div>
@@ -1211,7 +1266,7 @@
                                             </div>
                                         )}
 
-                                        {}
+                                        {/* Active / Completed Orders Tab */}
                                         {(adminTab === 'active' || adminTab === 'completed') && (
                                             <div className="space-y-4">
                                                 {orders.filter(o => adminTab === 'completed' ? o.status === 'completed' : o.status !== 'completed').map(order => (
@@ -1296,6 +1351,7 @@
                     </main>
 
                     {}
+                    {/* Printable A4 Modal */}
                     {selectedOrderDetails && (
                         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
                             <div className="bg-white w-full max-w-3xl rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl my-auto">
@@ -1305,7 +1361,7 @@
                                         <button onClick={() => window.print()} className="px-4 py-2 bg-farm-800 text-white font-bold text-xs rounded-xl shadow">
                                             🖨️ พิมพ์ / บันทึก PDF
                                         </button>
-                                        <button onClick={() => setSelectedOrderDetails(null)} className="px-3 py-2 bg-slate-200 text-slate-700 font-bold text-xs rounded-xl">
+                                        <button onClick={() => setSelectedOrderDetails(null)} className="px-3 py-2 bg-slate-200 text-slate-700 font-bold text-xs rounded-xl hover:bg-slate-300">
                                             ปิด
                                         </button>
                                     </div>
@@ -1398,7 +1454,7 @@
                         </div>
                     )}
 
-                    {/* Bottom Mobile Navigation */}
+                    {/* Mobile Navigation Bar */}
                     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 md:hidden z-20">
                         <div className="grid grid-cols-3 text-center py-2 text-[11px] font-bold">
                             <button onClick={() => setView('store')} className={`space-y-0.5 ${view === 'store' ? 'text-farm-800' : 'text-slate-400'}`}>
