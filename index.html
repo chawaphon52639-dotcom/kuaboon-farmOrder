@@ -190,9 +190,7 @@
             const [customQrImage, setCustomQrImage] = React.useState('');
             const [isSavingSettings, setIsSavingSettings] = React.useState(false);
 
-            // Staff & Whitelist inputs
-            const [newStaffName, setNewStaffName] = React.useState('');
-            const [newStaffPin, setNewStaffPin] = React.useState('');
+            // Whitelist state
             const [wholesaleWhitelist, setWholesaleWhitelist] = React.useState([
                 { id: '1', phone: '0891234567', name: 'ร้านสลัดคุณน้อง' },
                 { id: '2', phone: '0819876543', name: 'ร้านอาหารเกื้อบุญ' }
@@ -200,7 +198,7 @@
             const [newWholesalePhone, setNewWholesalePhone] = React.useState('');
             const [newWholesaleName, setNewWholesaleName] = React.useState('');
 
-            // Modals
+            // Modals & Drawers
             const [selectedOrderDetails, setSelectedOrderDetails] = React.useState(null);
             const [showCartDrawer, setShowCartDrawer] = React.useState(false);
 
@@ -439,6 +437,22 @@
                 reader.readAsDataURL(file);
             };
 
+            const handleProductImageUpload = async (productId, file) => {
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onloadend = async () => {
+                    try {
+                        const url = await uploadImageToStorage(reader.result, 'products');
+                        await db.collection('products').doc(productId).update({ image: url });
+                        alert('✅ อัปเดตรูปภาพผักเรียบร้อยแล้ว');
+                    } catch (err) {
+                        console.error("Product image error:", err);
+                        alert('❌ ไม่สามารถอัปโหลดรูปผักได้');
+                    }
+                };
+                reader.readAsDataURL(file);
+            };
+
             const handleSaveFarmSettings = async (e) => {
                 e.preventDefault();
                 setIsSavingSettings(true);
@@ -560,7 +574,7 @@
                                 <div className="bg-gradient-to-r from-farm-800 to-emerald-600 text-white p-6 rounded-3xl shadow-lg relative overflow-hidden">
                                     <div className="relative z-10 space-y-2 max-w-xl">
                                         <span className="bg-white/20 text-white text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider backdrop-blur-md">
-                                            🌿 ผักสลัดสด ปลอดสารพิษ 100%
+                                            🌿 ผักสลัดสด ปปลอดสารพิษ 100%
                                         </span>
                                         <h2 className="text-2xl sm:text-3xl font-extrabold leading-tight">สด กรอบ ส่งตรงจากแปลงทุกวัน</h2>
                                         <p className="text-emerald-100 text-xs sm:text-sm">
@@ -679,7 +693,7 @@
                             </div>
                         )}
 
-                        {/* Floating Cart Button */}
+                        {}
                         {cart.length > 0 && view === 'store' && (
                             <div className="fixed bottom-16 sm:bottom-6 right-4 left-4 max-w-md mx-auto z-30">
                                 <button 
@@ -702,7 +716,6 @@
                             </div>
                         )}
 
-                        {}
                         {showCartDrawer && (
                             <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex justify-end">
                                 <div className="bg-white w-full max-w-lg h-full overflow-y-auto p-5 space-y-6 flex flex-col justify-between">
@@ -973,7 +986,7 @@
                                                         onClick={() => setAdminTab('inventory')}
                                                         className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${adminTab === 'inventory' ? 'border-farm-800 text-farm-800' : 'border-transparent text-slate-500'}`}
                                                     >
-                                                        🥬 จัดการคลังผัก
+                                                        🥬 จัดการคลังผัก & รูปภาพ
                                                     </button>
                                                     <button 
                                                         onClick={() => setAdminTab('reports')}
@@ -991,18 +1004,33 @@
                                             )}
                                         </div>
 
-                                        {/* Inventory Tab */}
+                                        {}
                                         {adminTab === 'inventory' && userRole === 'admin' && (
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
-                                                <h3 className="font-extrabold text-slate-900 text-base">🥬 จัดการสต็อกคลังผักสด</h3>
+                                                <h3 className="font-extrabold text-slate-900 text-base">🥬 จัดการสต็อกคลังผักสดและรูปภาพ</h3>
                                                 <div className="divide-y divide-slate-100 text-xs">
                                                     {products.map(p => (
-                                                        <div key={p.id} className="py-3 flex items-center justify-between gap-2">
-                                                            <div>
-                                                                <p className="font-extrabold text-slate-900">{p.name}</p>
-                                                                <p className="text-slate-400">฿{p.priceRetail} / {p.unit}</p>
+                                                        <div key={p.id} className="py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="relative w-14 h-14 bg-slate-100 rounded-2xl overflow-hidden flex-shrink-0 border">
+                                                                    <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
+                                                                </div>
+                                                                <div>
+                                                                    <p className="font-extrabold text-slate-900">{p.name}</p>
+                                                                    <p className="text-slate-400">฿{p.priceRetail} / {p.unit}</p>
+                                                                    <label className="cursor-pointer text-[11px] font-bold text-farm-800 hover:underline inline-flex items-center gap-1 mt-1 bg-farm-50 px-2.5 py-1 rounded-lg border border-farm-200">
+                                                                        <span>📷 เปลี่ยนรูปผัก</span>
+                                                                        <input 
+                                                                            type="file" 
+                                                                            accept="image/*" 
+                                                                            className="hidden"
+                                                                            onChange={e => handleProductImageUpload(p.id, e.target.files[0])}
+                                                                        />
+                                                                    </label>
+                                                                </div>
                                                             </div>
                                                             <div className="flex items-center gap-2">
+                                                                <span className="text-slate-500 font-bold">สต็อก:</span>
                                                                 <input 
                                                                     type="number"
                                                                     value={p.stock}
@@ -1020,7 +1048,7 @@
                                             </div>
                                         )}
 
-                                        {/* Reports Tab */}
+                                        {}
                                         {adminTab === 'reports' && userRole === 'admin' && (
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                                                 <div className="flex justify-between items-center border-b pb-3">
@@ -1042,7 +1070,7 @@
                                             </div>
                                         )}
 
-                                        {/* Settings Tab */}
+                                        {}
                                         {adminTab === 'settings' && userRole === 'admin' && (
                                             <div className="space-y-6">
                                                 {/* Farm Info Form */}
@@ -1074,6 +1102,30 @@
                                                         <div>
                                                             <label className="font-bold text-slate-700 block mb-1">เบอร์พร้อมเพย์ (PromptPay)</label>
                                                             <input type="text" value={promptpayNo} onChange={e => setPromptpayNo(e.target.value)} className="w-full p-2.5 border rounded-xl" />
+                                                        </div>
+
+                                                        <div>
+                                                            <label className="font-bold text-slate-700 block mb-1">📸 อัปโหลดรูป QR Code พร้อมเพย์หน้าร้าน (ถ้ามี)</label>
+                                                            <div className="flex items-center gap-3 bg-slate-50 p-2.5 rounded-xl border">
+                                                                {customQrImage ? (
+                                                                    <img src={customQrImage} alt="QR Code Preview" className="w-14 h-14 object-cover rounded-lg border bg-white p-1" />
+                                                                ) : (
+                                                                    <div className="w-14 h-14 bg-slate-200 rounded-lg flex items-center justify-center text-slate-400 text-xs font-bold">ไม่มีรูป</div>
+                                                                )}
+                                                                <input 
+                                                                    type="file" 
+                                                                    accept="image/*"
+                                                                    onChange={e => {
+                                                                        const file = e.target.files[0];
+                                                                        if (file) {
+                                                                            const reader = new FileReader();
+                                                                            reader.onloadend = () => setCustomQrImage(reader.result);
+                                                                            reader.readAsDataURL(file);
+                                                                        }
+                                                                    }}
+                                                                    className="w-full text-xs text-slate-500"
+                                                                />
+                                                            </div>
                                                         </div>
 
                                                         <button 
@@ -1159,7 +1211,7 @@
                                             </div>
                                         )}
 
-                                        {/* Active / Completed Orders Tab */}
+                                        {}
                                         {(adminTab === 'active' || adminTab === 'completed') && (
                                             <div className="space-y-4">
                                                 {orders.filter(o => adminTab === 'completed' ? o.status === 'completed' : o.status !== 'completed').map(order => (
@@ -1346,7 +1398,7 @@
                         </div>
                     )}
 
-                    {}
+                    {/* Bottom Mobile Navigation */}
                     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 md:hidden z-20">
                         <div className="grid grid-cols-3 text-center py-2 text-[11px] font-bold">
                             <button onClick={() => setView('store')} className={`space-y-0.5 ${view === 'store' ? 'text-farm-800' : 'text-slate-400'}`}>
