@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+
 <html lang="th">
 <head>
     <meta charset="UTF-8">
@@ -85,7 +85,34 @@
         const db = firebase.firestore();
         const storage = firebase.storage();
 
-        // Helper for precise float calculations
+        // Audio Alert Helper using Web Audio API
+        const playAlertSound = () => {
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                const ctx = new AudioContext();
+                
+                [0, 0.25, 0.5, 0.75].forEach(delay => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(880, ctx.currentTime + delay);
+                    osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + delay + 0.18);
+                    
+                    gain.gain.setValueAtTime(0.6, ctx.currentTime + delay);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + delay + 0.22);
+                    
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    
+                    osc.start(ctx.currentTime + delay);
+                    osc.stop(ctx.currentTime + delay + 0.23);
+                });
+            } catch (e) {
+                console.warn("Audio Alert Error:", e);
+            }
+        };
+
         const roundStep = (num) => Math.round((num + Number.EPSILON) * 10) / 10;
 
         async function compressImageToBlob(fileOrDataUrl, maxWidth = 800, maxHeight = 800, quality = 0.8) {
@@ -236,6 +263,9 @@
             const [isSubmitting, setIsSubmitting] = React.useState(false);
             const [isFirebaseConnected, setIsFirebaseConnected] = React.useState(false);
 
+            // Audio Alert state flag
+            const isInitialOrderLoad = React.useRef(true);
+
             // Checkout state
             const [custName, setCustName] = React.useState('');
             const [custPhone, setCustPhone] = React.useState('');
@@ -322,6 +352,13 @@
 
                 const unsubOrders = db.collection('orders').orderBy('createdAt', 'desc').onSnapshot(snapshot => {
                     setIsFirebaseConnected(true);
+                    
+                    // Check for new incoming order to trigger loud audio alert
+                    if (!isInitialOrderLoad.current && snapshot.docChanges().some(change => change.type === 'added')) {
+                        playAlertSound();
+                    }
+                    isInitialOrderLoad.current = false;
+
                     const ords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     setOrders(ords);
                 }, err => {
@@ -574,7 +611,6 @@
                     const orderRef = db.collection('orders').doc(order.id);
                     batch.delete(orderRef);
 
-                    // Revert stock automatically if the order was not previously cancelled
                     if (order.status !== 'cancelled' && order.items && Array.isArray(order.items)) {
                         order.items.forEach(item => {
                             const pRef = db.collection('products').doc(item.id);
@@ -731,6 +767,18 @@
                             </div>
 
                             <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        playAlertSound();
+                                        showToast('🔊 ทดสอบเสียงเตือน', 'เล่นเสียงสัญญาณเตือนออเดอร์ใหม่เรียบร้อยแล้วครับ!', 'success');
+                                    }}
+                                    className="px-2.5 py-1.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 hover:bg-amber-200 transition-all border border-amber-300 flex items-center gap-1"
+                                >
+                                    <span>🔊</span>
+                                    <span className="hidden sm:inline">ทดสอบเสียง</span>
+                                </button>
+
                                 <button 
                                     type="button"
                                     onClick={() => showToast(
@@ -1189,7 +1237,6 @@
                                             </div>
                                         )}
 
-                                        {}
                                         {adminTab === 'reports' && userRole === 'admin' && (
                                             <div className="space-y-5">
                                                 {/* Summary Cards */}
@@ -1483,7 +1530,6 @@
                         )}
                     </main>
 
-                    {}
                     {selectedOrderDetails && (
                         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
                             <div className="bg-white w-full max-w-3xl rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl my-auto">
