@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>เกื้อบุญฟาร์ม - ระบบสั่งผักสดและบริหารจัดการคลาวด์</title>
+    <title>เกื้อบุญฟาร์ม - ระบบสั่งผักสดและบริหารจัดการคลาวด์ (Kuaboon Master v1.0)</title>
     
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -99,8 +99,12 @@
         const db = firebase.firestore();
         const storage = firebase.storage();
 
-        // Helper for precise float calculations (0.5 kg rounding)
         const roundStep = (num) => Math.round((num + Number.EPSILON) * 10) / 10;
+
+        const getFallbackSvg = (name) => {
+            const encodedName = encodeURIComponent(name || 'ผักสด');
+            return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400"><rect width="400" height="400" fill="%23dcfce7"/><text x="50%" y="45%" dominant-baseline="middle" text-anchor="middle" font-size="70">🥬</text><text x="50%" y="65%" dominant-baseline="middle" text-anchor="middle" font-size="22" font-weight="bold" fill="%2314532d">${encodedName}</text></svg>`;
+        };
 
         async function compressImageToBlob(fileOrDataUrl, maxWidth = 800, maxHeight = 800, quality = 0.8) {
             return new Promise((resolve, reject) => {
@@ -234,15 +238,15 @@
         }
 
         const INITIAL_PRODUCTS = [
-            { id: '1', name: 'กรีนโอ๊ค (Green Oak)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 45, unit: 'กก.', image: 'https://images.unsplash.com/photo-1622206151226-18ca2c9ab4a1?auto=format&fit=crop&w=400&q=80', desc: 'ผักปลอดสาร สด กรอบ หวาน ไม่ขม เก็บสดจากแปลงทุกเช้า' },
-            { id: '2', name: 'เรดโอ๊ค (Red Oak)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 30, unit: 'กก.', image: 'https://images.unsplash.com/photo-1556801712-76c8eb07ebb1?auto=format&fit=crop&w=400&q=80', desc: 'ผักปลอดสาร ใบสีแดงม่วง สวยงาม ไฟเบอร์สูง เหมาะทำสลัด' },
-            { id: '3', name: 'กรีนคอส (Green Cos)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 20, unit: 'กก.', image: 'https://images.unsplash.com/photo-1515471209610-e3f170587778?auto=format&fit=crop&w=400&q=80', desc: 'ผักปลอดสาร ใบกรอบ ทรงสวย รสชาติหวานกรอบธรรมชาติ' },
-            { id: '4', name: 'เบบี้คอส (Baby Cos)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 25, unit: 'กก.', image: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=400&q=80', desc: 'ผักปลอดสาร กรอบ แน่น เหมาะสำหรับทำซีซาร์สลัด' },
-            { id: '5', name: 'ฟินเลย์ (Frillice Iceberg)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 15, unit: 'กก.', image: 'https://images.unsplash.com/photo-1508747703725-719777637510?auto=format&fit=crop&w=400&q=80', desc: 'ผักปลอดสาร ใบหยิกกรอบมาก ฉ่ำน้ำ ทานง่าย' },
-            { id: '6', name: 'บัตเตอร์เฮด (Butterhead)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 18, unit: 'กก.', image: 'https://images.unsplash.com/photo-1556801712-76c8eb07ebb1?auto=format&fit=crop&w=400&q=80', desc: 'ผักปลอดสาร ใบนุ่มละมุน หวานธรรมชาติ ไม่มีความขม' },
-            { id: '7', name: 'ผักเคลสด (Organic Kale)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 12, unit: 'กก.', image: 'https://images.unsplash.com/photo-1524179091875-bf98a9a6ae57?auto=format&fit=crop&w=400&q=80', desc: 'ราชินีแห่งผักใบเขียวปลอดสาร คุณประโยชน์สูง วิตามินแน่น' },
-            { id: '8', name: 'ผักสลัดรวม (Mixed Salad)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 50, unit: 'กก.', image: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=400&q=80', desc: 'ผักปลอดสารสลัดรวมมิตร คละชนิด สด กรอบ พร้อมทาน' },
-            { id: '9', name: 'น้ำเคลปั่นสด (ขนาด 300 ml)', category: 'drink', priceRetail: 50, priceWholesale: 50, stock: 40, unit: 'ขวด', image: 'https://images.unsplash.com/photo-1610970881699-44a5587cabec?auto=format&fit=crop&w=400&q=80', desc: 'น้ำเคลปั่นสกัดสด ขนาด 300 ml เข้มข้น สดชื่น ปลอดสาร 100%' }
+            { id: '1', name: 'กรีนโอ๊ค (Green Oak)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 45, unit: 'กก.', image: 'https://images.unsplash.com/photo-1622206151226-18ca2c9ab4a1?auto=format&fit=crop&w=600&q=80', desc: 'ผักปลอดสาร สด กรอบ หวาน ไม่ขม เก็บสดจากแปลงทุกเช้า' },
+            { id: '2', name: 'เรดโอ๊ค (Red Oak)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 30, unit: 'กก.', image: 'https://images.unsplash.com/photo-1556801712-76c8eb07ebb1?auto=format&fit=crop&w=600&q=80', desc: 'ผักปลอดสาร ใบสีแดงม่วง สวยงาม ไฟเบอร์สูง เหมาะทำสลัด' },
+            { id: '3', name: 'กรีนคอส (Green Cos)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 20, unit: 'กก.', image: 'https://images.unsplash.com/photo-1515471209610-e3f170587778?auto=format&fit=crop&w=600&q=80', desc: 'ผักปลอดสาร ใบกรอบ ทรงสวย รสชาติหวานกรอบธรรมชาติ' },
+            { id: '4', name: 'เบบี้คอส (Baby Cos)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 25, unit: 'กก.', image: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=600&q=80', desc: 'ผักปลอดสาร กรอบ แน่น เหมาะสำหรับทำซีซาร์สลัด' },
+            { id: '5', name: 'ฟินเลย์ (Frillice Iceberg)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 15, unit: 'กก.', image: 'https://images.unsplash.com/photo-1508747703725-719777637510?auto=format&fit=crop&w=600&q=80', desc: 'ผักปลอดสาร ใบหยิกกรอบมาก ฉ่ำน้ำ ทานง่าย' },
+            { id: '6', name: 'บัตเตอร์เฮด (Butterhead)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 18, unit: 'กก.', image: 'https://images.unsplash.com/photo-1556801712-76c8eb07ebb1?auto=format&fit=crop&w=600&q=80', desc: 'ผักปลอดสาร ใบนุ่มละมุน หวานธรรมชาติ ไม่มีความขม' },
+            { id: '7', name: 'ผักเคลสด (Organic Kale)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 12, unit: 'กก.', image: 'https://images.unsplash.com/photo-1524179091875-bf98a9a6ae57?auto=format&fit=crop&w=600&q=80', desc: 'ราชินีแห่งผักใบเขียวปลอดสาร คุณประโยชน์สูง วิตามินแน่น' },
+            { id: '8', name: 'ผักสลัดรวม (Mixed Salad)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 50, unit: 'กก.', image: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=600&q=80', desc: 'ผักปลอดสารสลัดรวมมิตร คละชนิด สด กรอบ พร้อมทาน' },
+            { id: '9', name: 'น้ำเคลปั่นสด (ขนาด 300 ml)', category: 'drink', priceRetail: 50, priceWholesale: 50, stock: 40, unit: 'ขวด', image: 'https://images.unsplash.com/photo-1610970881699-44a5587cabec?auto=format&fit=crop&w=600&q=80', desc: 'น้ำเคลปั่นสกัดสด ขนาด 300 ml เข้มข้น สดชื่น ปลอดสาร 100%' }
         ];
 
         function App() {
@@ -277,12 +281,22 @@
                 { id: 1, name: 'พนักงานแพ็คผัก 1', pin: '1111' },
                 { id: 2, name: 'พนักงานจัดส่ง 2', pin: '2222' }
             ]);
-            const [adminTab, setAdminTab] = React.useState('active'); // 'active' | 'completed' | 'inventory' | 'reports' | 'settings'
+            const [adminTab, setAdminTab] = React.useState('active');
 
             // Editing Wholesale Customer State
             const [editingWholesaleId, setEditingWholesaleId] = React.useState(null);
             const [editWholesaleName, setEditWholesaleName] = React.useState('');
             const [editWholesalePhone, setEditWholesalePhone] = React.useState('');
+
+            // Editing Product Details & Image State
+            const [editingProductModal, setEditingProductModal] = React.useState(null);
+            const [prodName, setProdName] = React.useState('');
+            const [prodPriceRetail, setProdPriceRetail] = React.useState('');
+            const [prodPriceWholesale, setProdPriceWholesale] = React.useState('');
+            const [prodDesc, setProdDesc] = React.useState('');
+            const [prodImagePreview, setProdImagePreview] = React.useState('');
+            const [prodImageFile, setProdImageFile] = React.useState(null);
+            const [isUploadingProdImg, setIsUploadingProdImg] = React.useState(false);
 
             // Settings State
             const [farmName, setFarmName] = React.useState('เกื้อบุญฟาร์ม (Kuaboon Farm)');
@@ -309,7 +323,7 @@
             const [selectedOrderDetails, setSelectedOrderDetails] = React.useState(null);
             const [showCartDrawer, setShowCartDrawer] = React.useState(false);
 
-            // Refs for event listeners & order detection
+            // Refs
             const audioCtxRef = React.useRef(null);
             const viewRef = React.useRef(view);
             const isAdminLoggedInRef = React.useRef(isAdminLoggedIn);
@@ -583,21 +597,27 @@
                         createdAt: firebase.firestore.FieldValue.serverTimestamp()
                     };
 
-                    await db.collection('orders').doc(orderId).set(newOrder);
+                    if (isFirebaseConnected) {
+                        await db.collection('orders').doc(orderId).set(newOrder);
 
-                    // Update stock
-                    const batch = db.batch();
-                    cart.forEach(cItem => {
-                        const pRef = db.collection('products').doc(cItem.id);
-                        const currentProd = products.find(p => p.id === cItem.id);
-                        if (currentProd) {
-                            const newStock = Math.max(0, roundStep(currentProd.stock - cItem.qty));
-                            batch.update(pRef, { stock: newStock });
-                        }
-                    });
-                    await batch.commit();
+                        const batch = db.batch();
+                        cart.forEach(cItem => {
+                            const pRef = db.collection('products').doc(cItem.id);
+                            const currentProd = products.find(p => p.id === cItem.id);
+                            if (currentProd) {
+                                const newStock = Math.max(0, roundStep(currentProd.stock - cItem.qty));
+                                batch.update(pRef, { stock: newStock });
+                            }
+                        });
+                        await batch.commit();
+                    } else {
+                        setOrders(prev => [newOrder, ...prev]);
+                        setProducts(prev => prev.map(p => {
+                            const inC = cart.find(c => c.id === p.id);
+                            return inC ? { ...p, stock: Math.max(0, roundStep(p.stock - inC.qty)) } : p;
+                        }));
+                    }
 
-                    // Clear customer inputs & cart cleanly so next order starts fresh
                     setCustName('');
                     setCustPhone('');
                     setCustAddress('');
@@ -615,7 +635,7 @@
                     showToast('🎉 สั่งซื้อผักสดสำเร็จ!', `ส่งรายการคำสั่งซื้อเลขที่ ${newDocNo} เข้าสู่ระบบเรียบร้อยแล้ว`, 'success');
                 } catch (err) {
                     console.error("Order submit error:", err);
-                    showToast('❌ เกิดข้อผิดพลาด', 'ไม่สามารถบันทึกออเดอร์ได้ กรุณาตรวจสอบสิทธิ์ Firestore/Storage Rules', 'error');
+                    showToast('❌ เกิดข้อผิดพลาด', 'ไม่สามารถบันทึกออเดอร์ได้', 'error');
                 } finally {
                     setIsSubmitting(false);
                 }
@@ -632,22 +652,26 @@
                 }
 
                 try {
-                    const batch = db.batch();
-                    const orderRef = db.collection('orders').doc(order.id);
-                    batch.update(orderRef, { status: 'cancelled' });
+                    if (isFirebaseConnected) {
+                        const batch = db.batch();
+                        const orderRef = db.collection('orders').doc(order.id);
+                        batch.update(orderRef, { status: 'cancelled' });
 
-                    if (order.items) {
-                        order.items.forEach(item => {
-                            const prodRef = db.collection('products').doc(item.id);
-                            const currentProd = products.find(p => p.id === item.id);
-                            if (currentProd) {
-                                const restoredStock = roundStep(currentProd.stock + (item.qty || 0));
-                                batch.update(prodRef, { stock: restoredStock });
-                            }
-                        });
+                        if (order.items) {
+                            order.items.forEach(item => {
+                                const prodRef = db.collection('products').doc(item.id);
+                                const currentProd = products.find(p => p.id === item.id);
+                                if (currentProd) {
+                                    const restoredStock = roundStep(currentProd.stock + (item.qty || 0));
+                                    batch.update(prodRef, { stock: restoredStock });
+                                }
+                            });
+                        }
+
+                        await batch.commit();
+                    } else {
+                        setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'cancelled' } : o));
                     }
-
-                    await batch.commit();
                     showToast('✅ ยกเลิกออเดอร์สำเร็จ', 'ทำการยกเลิกออเดอร์และคืนจำนวนผักสดเข้าสต็อกเรียบร้อยแล้ว', 'success');
                 } catch (err) {
                     console.error("Cancel order error:", err);
@@ -666,26 +690,30 @@
                 }
 
                 try {
-                    const batch = db.batch();
-                    const orderRef = db.collection('orders').doc(order.id);
-                    batch.delete(orderRef);
+                    if (isFirebaseConnected) {
+                        const batch = db.batch();
+                        const orderRef = db.collection('orders').doc(order.id);
+                        batch.delete(orderRef);
 
-                    if (order.status !== 'cancelled' && order.items) {
-                        order.items.forEach(item => {
-                            const prodRef = db.collection('products').doc(item.id);
-                            const currentProd = products.find(p => p.id === item.id);
-                            if (currentProd) {
-                                const restoredStock = roundStep(currentProd.stock + (item.qty || 0));
-                                batch.update(prodRef, { stock: restoredStock });
-                            }
-                        });
+                        if (order.status !== 'cancelled' && order.items) {
+                            order.items.forEach(item => {
+                                const prodRef = db.collection('products').doc(item.id);
+                                const currentProd = products.find(p => p.id === item.id);
+                                if (currentProd) {
+                                    const restoredStock = roundStep(currentProd.stock + (item.qty || 0));
+                                    batch.update(prodRef, { stock: restoredStock });
+                                }
+                            });
+                        }
+
+                        await batch.commit();
+                    } else {
+                        setOrders(prev => prev.filter(o => o.id !== order.id));
                     }
-
-                    await batch.commit();
                     showToast('🗑️ ลบออเดอร์สำเร็จ!', `ลบรายการ ${order.docNo} และคืนผักเข้าสต็อกเรียบร้อยแล้ว`, 'success');
                 } catch (err) {
                     console.error("Delete order error:", err);
-                    showToast('❌ ไม่สามารถลบได้', 'เกิดข้อผิดพลาดในการลบออเดอร์จาก Firebase', 'error');
+                    showToast('❌ ไม่สามารถลบได้', 'เกิดข้อผิดพลาดในการลบออเดอร์', 'error');
                 }
             };
 
@@ -714,7 +742,11 @@
 
             const updateOrderStatus = async (orderId, newStatus) => {
                 try {
-                    await db.collection('orders').doc(orderId).update({ status: newStatus });
+                    if (isFirebaseConnected) {
+                        await db.collection('orders').doc(orderId).update({ status: newStatus });
+                    } else {
+                        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+                    }
                     showToast('✅ อัปเดตสถานะสำเร็จ', `เปลี่ยนสถานะออเดอร์เป็น "${newStatus}" เรียบร้อยแล้ว`, 'success');
                 } catch (err) {
                     console.error("Update order status error:", err);
@@ -724,9 +756,13 @@
 
             const handleUploadProofImage = async (orderId, file) => {
                 try {
-                    showToast('⏳ กำลังอัปโหลดหลักฐาน...', 'กำลังย่อและบันทึกรูปภาพขึ้นคลาวด์...', 'info');
+                    showToast('⏳ กำลังอัปโหลดหลักฐาน...', 'กำลังย่อและบันทึกรูปภาพ...', 'info');
                     const uploadedUrl = await uploadBlobToStorage(file, 'delivery_proofs');
-                    await db.collection('orders').doc(orderId).update({ proofImage: uploadedUrl });
+                    if (isFirebaseConnected) {
+                        await db.collection('orders').doc(orderId).update({ proofImage: uploadedUrl });
+                    } else {
+                        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, proofImage: uploadedUrl } : o));
+                    }
                     showToast('📸 แนบหลักฐานสำเร็จ!', 'บันทึกรูปภาพหลักฐานการจัดส่งเรียบร้อยแล้ว', 'success');
                 } catch (err) {
                     console.error("Proof image upload error:", err);
@@ -748,11 +784,12 @@
                 setNewWholesalePhone('');
 
                 try {
-                    await db.collection('settings').doc('farm_config').set({ wholesaleWhitelist: updatedList }, { merge: true });
+                    if (isFirebaseConnected) {
+                        await db.collection('settings').doc('farm_config').set({ wholesaleWhitelist: updatedList }, { merge: true });
+                    }
                     showToast('✅ เพิ่มร้านค้าสำเร็จ', `ลงทะเบียนคุณ/ร้าน ${newWholesaleName} เข้าระบบลูกค้าราคาส่งเรียบร้อยแล้ว`, 'success');
                 } catch (err) {
                     console.error("Save wholesale error:", err);
-                    showToast('❌ บันทึกไม่สำเร็จ', 'เกิดข้อผิดพลาดในการบันทึกข้อมูลลงคลาวด์', 'error');
                 }
             };
 
@@ -773,11 +810,12 @@
                 setEditingWholesaleId(null);
 
                 try {
-                    await db.collection('settings').doc('farm_config').set({ wholesaleWhitelist: updatedList }, { merge: true });
+                    if (isFirebaseConnected) {
+                        await db.collection('settings').doc('farm_config').set({ wholesaleWhitelist: updatedList }, { merge: true });
+                    }
                     showToast('✏️ แก้ไขข้อมูลสำเร็จ', 'อัปเดตชื่อและเบอร์โทรศัพท์ร้านค้าส่งเรียบร้อยแล้ว', 'success');
                 } catch (err) {
                     console.error("Edit wholesale error:", err);
-                    showToast('❌ บันทึกไม่สำเร็จ', 'เกิดข้อผิดพลาดในการบันทึกข้อมูล', 'error');
                 }
             };
 
@@ -785,7 +823,9 @@
                 const updatedList = wholesaleWhitelist.filter(w => w.id !== id);
                 setWholesaleWhitelist(updatedList);
                 try {
-                    await db.collection('settings').doc('farm_config').set({ wholesaleWhitelist: updatedList }, { merge: true });
+                    if (isFirebaseConnected) {
+                        await db.collection('settings').doc('farm_config').set({ wholesaleWhitelist: updatedList }, { merge: true });
+                    }
                     showToast('🗑️ ลบรายชื่อเรียบร้อย', 'ลบร้านค้าออกจากระบบสิทธิ์ราคาส่งแล้ว', 'info');
                 } catch (err) {
                     console.error("Delete wholesale error:", err);
@@ -810,11 +850,12 @@
                 setNewStaffName('');
                 setNewStaffPin('');
                 try {
-                    await db.collection('settings').doc('farm_config').set({ staffList: updatedStaff }, { merge: true });
+                    if (isFirebaseConnected) {
+                        await db.collection('settings').doc('farm_config').set({ staffList: updatedStaff }, { merge: true });
+                    }
                     showToast('✅ เพิ่มพนักงานสำเร็จ', `ลงทะเบียนคุณ ${newStaffName.trim()} เข้าระบบเรียบร้อยแล้ว`, 'success');
                 } catch (err) {
                     console.error("Save staff error:", err);
-                    showToast('❌ บันทึกไม่สำเร็จ', 'เกิดข้อผิดพลาดในการบันทึกข้อมูลพนักงาน', 'error');
                 }
             };
 
@@ -822,7 +863,9 @@
                 const updatedStaff = staffList.filter(s => s.id !== id);
                 setStaffList(updatedStaff);
                 try {
-                    await db.collection('settings').doc('farm_config').set({ staffList: updatedStaff }, { merge: true });
+                    if (isFirebaseConnected) {
+                        await db.collection('settings').doc('farm_config').set({ staffList: updatedStaff }, { merge: true });
+                    }
                     showToast('🗑️ ลบพนักงานเรียบร้อย', 'ลบรายชื่อพนักงานออกจากระบบแล้ว', 'info');
                 } catch (err) {
                     console.error("Delete staff error:", err);
@@ -852,11 +895,12 @@
                         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                     };
 
-                    await db.collection('settings').doc('farm_config').set(settingsData, { merge: true });
-                    showToast('💾 บันทึกตั้งค่าสำเร็จ', 'ข้อมูลฟาร์มและรูปภาพอัปเดตขึ้นคลาวด์เรียบร้อยแล้ว', 'success');
+                    if (isFirebaseConnected) {
+                        await db.collection('settings').doc('farm_config').set(settingsData, { merge: true });
+                    }
+                    showToast('💾 บันทึกตั้งค่าสำเร็จ', 'ข้อมูลฟาร์มและรูปภาพเรียบร้อยแล้ว', 'success');
                 } catch (err) {
                     console.error("Save settings error:", err);
-                    showToast('❌ บันทึกไม่สำเร็จ', 'กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตหรือสิทธิ์ Firebase Rules', 'error');
                 } finally {
                     setIsSavingSettings(false);
                 }
@@ -866,7 +910,9 @@
                 setCustomQrImage('');
                 setCustomQrFile(null);
                 try {
-                    await db.collection('settings').doc('farm_config').set({ customQrImage: '' }, { merge: true });
+                    if (isFirebaseConnected) {
+                        await db.collection('settings').doc('farm_config').set({ customQrImage: '' }, { merge: true });
+                    }
                     showToast('🗑️ ลบรูป QR Code สำเร็จ', 'ระบบรีเซ็ตกลับไปใช้ QR Code พร้อมเพย์อัตโนมัติแล้ว', 'info');
                 } catch (err) {
                     console.error("Clear QR error:", err);
@@ -891,6 +937,60 @@
                 link.click();
                 document.body.removeChild(link);
                 showToast('📥 ส่งออก CSV สำเร็จ', 'ดาวน์โหลดไฟล์รายงานยอดขายเรียบร้อยแล้ว', 'success');
+            };
+
+            const handleOpenEditProduct = (p) => {
+                setEditingProductModal(p);
+                setProdName(p.name || '');
+                setProdPriceRetail(p.priceRetail || 0);
+                setProdPriceWholesale(p.priceWholesale || 0);
+                setProdDesc(p.desc || '');
+                setProdImagePreview(p.image || '');
+                setProdImageFile(null);
+            };
+
+            const handleSaveProductDetails = async (e) => {
+                e.preventDefault();
+                if (!editingProductModal) return;
+                
+                setIsUploadingProdImg(true);
+                try {
+                    showToast('⏳ กำลังบันทึกข้อมูลผัก...', 'กำลังบันทึกชื่อ ราคา คำอธิบาย และรูปถ่ายขึ้นระบบ...', 'info');
+                    let newUrl = prodImagePreview;
+                    
+                    if (prodImageFile) {
+                        newUrl = await uploadBlobToStorage(prodImageFile, 'product_images', { maxWidth: 800, maxHeight: 800 });
+                    }
+
+                    if (!newUrl) {
+                        showToast('⚠️ กรุณาเลือกรูปภาพ', 'ยังไม่ได้เลือกไฟล์รูปภาพหรือระบุ URL รูปภาพ', 'error');
+                        return;
+                    }
+
+                    const updatedData = {
+                        name: prodName.trim(),
+                        priceRetail: parseFloat(prodPriceRetail) || 0,
+                        priceWholesale: parseFloat(prodPriceWholesale) || 0,
+                        desc: prodDesc.trim(),
+                        image: newUrl
+                    };
+
+                    setProducts(prev => prev.map(p => p.id === editingProductModal.id ? { ...p, ...updatedData } : p));
+
+                    if (isFirebaseConnected) {
+                        await db.collection('products').doc(editingProductModal.id).set(updatedData, { merge: true });
+                    }
+
+                    showToast('🎉 บันทึกข้อมูลผักสำเร็จ!', `อัปเดตข้อมูล "${prodName.trim()}" เรียบร้อยแล้ว`, 'success');
+                    setEditingProductModal(null);
+                    setProdImagePreview('');
+                    setProdImageFile(null);
+                } catch (err) {
+                    console.error("Save product details error:", err);
+                    showToast('❌ ไม่สามารถบันทึกข้อมูลได้', 'เกิดข้อผิดพลาดในการอัปโหลดรูปภาพหรือบันทึกข้อมูล', 'error');
+                } finally {
+                    setIsUploadingProdImg(false);
+                }
             };
 
             return (
@@ -988,7 +1088,7 @@
                     )}
 
                     <main className="max-w-6xl mx-auto px-4 pt-4">
-                        {/* STOREFRONT VIEW */}
+                        {}
                         {view === 'store' && (
                             <div className="space-y-6">
                                 {/* Top Banner */}
@@ -1076,7 +1176,15 @@
                                                 <div key={product.id} className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col justify-between hover:shadow-md transition-all">
                                                     <div>
                                                         <div className="relative h-36 sm:h-44 bg-slate-100 overflow-hidden">
-                                                            <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+                                                            <img 
+                                                                src={product.image} 
+                                                                alt={product.name} 
+                                                                className="w-full h-full object-cover" 
+                                                                onError={(e) => {
+                                                                    e.target.onerror = null;
+                                                                    e.target.src = getFallbackSvg(product.name);
+                                                                }}
+                                                            />
                                                             <div className="absolute top-2 left-2 flex flex-col gap-1">
                                                                 <span className="bg-slate-900/80 backdrop-blur-md text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full">
                                                                     สต็อก {product.stock} {product.unit}
@@ -1180,7 +1288,7 @@
                             </div>
                         )}
 
-                        {/* Cart Drawer & Checkout */}
+                        {}
                         {showCartDrawer && (
                             <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex justify-end">
                                 <div className="bg-white w-full max-w-lg h-full overflow-y-auto p-5 space-y-6 flex flex-col justify-between">
@@ -1342,7 +1450,7 @@
                             </div>
                         )}
 
-                        {/* ORDER TRACKING VIEW */}
+                        {}
                         {view === 'tracking' && (
                             <div className="space-y-4 max-w-3xl mx-auto">
                                 <h2 className="font-extrabold text-slate-900 text-lg">🚚 ติดตามสถานะออเดอร์จัดส่ง</h2>
@@ -1440,7 +1548,7 @@
                             </div>
                         )}
 
-                        {/* BACKOFFICE VIEW */}
+                        {}
                         {view === 'backoffice' && (
                             <div className="space-y-6">
                                 {!isAdminLoggedIn ? (
@@ -1539,8 +1647,8 @@
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                                                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-3">
                                                     <div>
-                                                        <h3 className="font-extrabold text-slate-900 text-base">🥬 จัดการสต็อกผัก 8 ชนิด + น้ำปั่นเคล 1 รายการ</h3>
-                                                        <p className="text-slate-500 text-xs">ปรับสต็อกผักสลัดครั้งละ 0.5 กิโลกรัม</p>
+                                                        <h3 className="font-extrabold text-slate-900 text-base">🥬 จัดการคลังผัก สต็อก ชื่อ ราคา & รูปภาพ (9 รายการ)</h3>
+                                                        <p className="text-slate-500 text-xs">น้ารามสามารถกดแก้ไขชื่อ ราคาปลีก/ส่ง คำอธิบาย หรือปรับจำนวนสต็อกผักสดได้ที่นี่</p>
                                                     </div>
                                                     <button 
                                                         onClick={handleForceSync9Products}
@@ -1555,23 +1663,48 @@
                                                     {products.map(p => (
                                                         <div key={p.id} className="py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                                                             <div className="flex items-center gap-3">
-                                                                <div className="relative w-14 h-14 bg-slate-100 rounded-2xl overflow-hidden flex-shrink-0 border">
-                                                                    <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
+                                                                <div className="relative w-16 h-16 bg-slate-100 rounded-2xl overflow-hidden flex-shrink-0 border group shadow-sm cursor-pointer" onClick={() => handleOpenEditProduct(p)}>
+                                                                    <img 
+                                                                        src={p.image} 
+                                                                        alt={p.name} 
+                                                                        className="w-full h-full object-cover"
+                                                                        onError={(e) => {
+                                                                            e.target.onerror = null;
+                                                                            e.target.src = getFallbackSvg(p.name);
+                                                                        }} 
+                                                                    />
+                                                                    <button 
+                                                                        type="button"
+                                                                        className="absolute inset-0 bg-slate-900/60 text-white font-extrabold text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+                                                                    >
+                                                                        ✏️ แก้ไข
+                                                                    </button>
                                                                 </div>
                                                                 <div>
-                                                                    <h4 className="font-extrabold text-slate-900">{p.name}</h4>
-                                                                    <p className="text-slate-400">ราคาปลีก ฿{p.priceRetail} | ส่ง ฿{p.priceWholesale} /{p.unit}</p>
+                                                                    <h4 className="font-extrabold text-slate-900 text-sm">{p.name}</h4>
+                                                                    <p className="text-slate-500 font-medium">ราคาปลีก <span className="font-bold text-farm-800">฿{p.priceRetail}</span> | ส่ง <span className="font-bold text-amber-600">฿{p.priceWholesale}</span> /{p.unit}</p>
+                                                                    <button 
+                                                                        type="button"
+                                                                        onClick={() => handleOpenEditProduct(p)}
+                                                                        className="mt-1 text-farm-800 font-bold hover:underline flex items-center gap-1 text-[11px]"
+                                                                    >
+                                                                        <span>✏️ แก้ไขชื่อ ราคา & รูปผัก</span>
+                                                                    </button>
                                                                 </div>
                                                             </div>
 
-                                                            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                                                            <div className="flex items-center gap-2 w-full sm:w-auto justify-end bg-slate-50 p-2 sm:bg-transparent sm:p-0 rounded-2xl">
                                                                 <button 
                                                                     onClick={async () => {
                                                                         const step = p.category === 'salad' ? 0.5 : 1;
                                                                         const newStock = Math.max(0, roundStep(p.stock - step));
-                                                                        await db.collection('products').doc(p.id).update({ stock: newStock });
+                                                                        if (isFirebaseConnected) {
+                                                                            await db.collection('products').doc(p.id).update({ stock: newStock });
+                                                                        } else {
+                                                                            setProducts(prev => prev.map(item => item.id === p.id ? { ...item, stock: newStock } : item));
+                                                                        }
                                                                     }}
-                                                                    className="w-8 h-8 bg-slate-100 hover:bg-slate-200 rounded-xl font-extrabold text-slate-700"
+                                                                    className="w-8 h-8 bg-white sm:bg-slate-100 hover:bg-slate-200 rounded-xl font-extrabold text-slate-700 shadow-sm border sm:border-none"
                                                                 >
                                                                     -
                                                                 </button>
@@ -1581,18 +1714,27 @@
                                                                     value={p.stock}
                                                                     onChange={async (e) => {
                                                                         const val = parseFloat(e.target.value) || 0;
-                                                                        await db.collection('products').doc(p.id).update({ stock: roundStep(val) });
+                                                                        const newStock = roundStep(val);
+                                                                        if (isFirebaseConnected) {
+                                                                            await db.collection('products').doc(p.id).update({ stock: newStock });
+                                                                        } else {
+                                                                            setProducts(prev => prev.map(item => item.id === p.id ? { ...item, stock: newStock } : item));
+                                                                        }
                                                                     }}
-                                                                    className="w-20 p-1.5 border rounded-xl text-center font-extrabold bg-slate-50"
+                                                                    className="w-20 p-1.5 border rounded-xl text-center font-extrabold bg-white text-xs outline-none focus:border-farm-800"
                                                                 />
-                                                                <span className="font-bold text-slate-500">{p.unit}</span>
+                                                                <span className="font-bold text-slate-500 text-xs">{p.unit}</span>
                                                                 <button 
                                                                     onClick={async () => {
                                                                         const step = p.category === 'salad' ? 0.5 : 1;
                                                                         const newStock = roundStep(p.stock + step);
-                                                                        await db.collection('products').doc(p.id).update({ stock: newStock });
+                                                                        if (isFirebaseConnected) {
+                                                                            await db.collection('products').doc(p.id).update({ stock: newStock });
+                                                                        } else {
+                                                                            setProducts(prev => prev.map(item => item.id === p.id ? { ...item, stock: newStock } : item));
+                                                                        }
                                                                     }}
-                                                                    className="w-8 h-8 bg-farm-800 hover:bg-farm-900 text-white rounded-xl font-extrabold"
+                                                                    className="w-8 h-8 bg-farm-800 hover:bg-farm-900 text-white rounded-xl font-extrabold shadow-sm"
                                                                 >
                                                                     +
                                                                 </button>
@@ -2031,7 +2173,7 @@
                         )}
                     </main>
 
-                    {/* Document Preview Modal */}
+                    {}
                     {selectedOrderDetails && (
                         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
                             <div className="bg-white w-full max-w-3xl rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl my-auto">
@@ -2181,7 +2323,145 @@
                         </div>
                     )}
 
-                    {/* Mobile Navigation Bar */}
+                    {}
+                    {editingProductModal && (
+                        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+                            <div className="bg-white rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl border my-auto">
+                                <div className="flex items-center justify-between border-b pb-3">
+                                    <div>
+                                        <h3 className="font-extrabold text-slate-900 text-base">✏️ แก้ไขชื่อ ราคา และรูปถ่ายผักสด</h3>
+                                        <p className="text-slate-500 text-xs">รหัสสินค้า: {editingProductModal.id}</p>
+                                    </div>
+                                    <button 
+                                        onClick={() => {
+                                            setEditingProductModal(null);
+                                            setProdImagePreview('');
+                                            setProdImageFile(null);
+                                        }} 
+                                        className="w-8 h-8 bg-slate-100 rounded-full font-bold text-slate-500 hover:bg-slate-200 text-xs"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+
+                                <form onSubmit={handleSaveProductDetails} className="space-y-3.5 text-xs">
+                                    <div>
+                                        <label className="font-extrabold text-slate-700 block mb-1">🥬 ชื่อสินค้า / ผักสด *</label>
+                                        <input 
+                                            type="text" 
+                                            required
+                                            value={prodName}
+                                            onChange={(e) => setProdName(e.target.value)}
+                                            placeholder="เช่น กรีนโอ๊ค (Green Oak)"
+                                            className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none font-extrabold focus:border-farm-800 text-slate-900"
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2.5">
+                                        <div>
+                                            <label className="font-extrabold text-slate-700 block mb-1">🏷️ ราคาปลีก (฿/{editingProductModal.unit}) *</label>
+                                            <input 
+                                                type="number" 
+                                                step="0.5"
+                                                required
+                                                value={prodPriceRetail}
+                                                onChange={(e) => setProdPriceRetail(e.target.value)}
+                                                className="w-full p-2.5 border rounded-xl bg-slate-50 font-extrabold text-farm-800 text-center outline-none focus:border-farm-800"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="font-extrabold text-slate-700 block mb-1">⭐ ราคาส่ง (฿/{editingProductModal.unit}) *</label>
+                                            <input 
+                                                type="number" 
+                                                step="0.5"
+                                                required
+                                                value={prodPriceWholesale}
+                                                onChange={(e) => setProdPriceWholesale(e.target.value)}
+                                                className="w-full p-2.5 border rounded-xl bg-slate-50 font-extrabold text-amber-700 text-center outline-none focus:border-farm-800"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="font-bold text-slate-700 block mb-1">📝 คำอธิบายสินค้า</label>
+                                        <textarea 
+                                            rows="2"
+                                            value={prodDesc}
+                                            onChange={(e) => setProdDesc(e.target.value)}
+                                            placeholder="เช่น ผักปลอดสาร สด กรอบ เก็บสดทุกเช้า"
+                                            className="w-full p-2.5 border rounded-xl bg-slate-50 text-slate-700 outline-none focus:border-farm-800"
+                                        ></textarea>
+                                    </div>
+
+                                    <div className="space-y-2 pt-2 border-t">
+                                        <p className="font-extrabold text-slate-800">🖼️ รูปถ่ายสินค้า:</p>
+                                        <div className="relative w-36 h-36 mx-auto rounded-2xl overflow-hidden border-2 border-slate-200 shadow-sm bg-slate-50">
+                                            <img 
+                                                src={prodImagePreview || editingProductModal.image} 
+                                                alt="Preview" 
+                                                className="w-full h-full object-cover"
+                                                onError={(e) => {
+                                                    e.target.onerror = null;
+                                                    e.target.src = getFallbackSvg(prodName || editingProductModal.name);
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-1.5 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                                        <label className="font-bold text-slate-700 block text-[11px]">📁 อัปโหลดรูปใหม่จากมือถือ/คอมพิวเตอร์:</label>
+                                        <input 
+                                            type="file" 
+                                            accept="image/*"
+                                            onChange={(e) => {
+                                                const file = e.target.files && e.target.files[0];
+                                                if (file) {
+                                                    setProdImageFile(file);
+                                                    const reader = new FileReader();
+                                                    reader.onload = (ev) => setProdImagePreview(ev.target.result);
+                                                    reader.readAsDataURL(file);
+                                                }
+                                            }}
+                                            className="w-full text-xs text-slate-500"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <label className="font-bold text-slate-700 block text-[11px]">หรือวางลิงก์รูปภาพ (Image URL):</label>
+                                        <input 
+                                            type="url" 
+                                            placeholder="https://..." 
+                                            value={prodImageFile ? '' : prodImagePreview}
+                                            onChange={(e) => {
+                                                setProdImageFile(null);
+                                                setProdImagePreview(e.target.value);
+                                            }}
+                                            className="w-full p-2 border rounded-xl bg-slate-50 outline-none text-[11px] focus:border-farm-800"
+                                        />
+                                    </div>
+
+                                    <div className="pt-2 flex gap-2">
+                                        <button 
+                                            type="button"
+                                            onClick={() => setEditingProductModal(null)}
+                                            className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-all"
+                                        >
+                                            ยกเลิก
+                                        </button>
+                                        <button 
+                                            type="submit"
+                                            disabled={isUploadingProdImg}
+                                            className="flex-1 py-2.5 bg-farm-800 hover:bg-farm-900 text-white font-extrabold rounded-xl shadow transition-all flex items-center justify-center gap-1.5"
+                                        >
+                                            {isUploadingProdImg ? '⏳ กำลังบันทึก...' : '💾 บันทึกข้อมูลผัก'}
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
+                    {}
                     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 md:hidden z-20">
                         <div className="grid grid-cols-3 text-center py-2 text-[11px] font-bold">
                             <button onClick={() => setView('store')} className={`space-y-0.5 ${view === 'store' ? 'text-farm-800 font-extrabold' : 'text-slate-400'}`}>
