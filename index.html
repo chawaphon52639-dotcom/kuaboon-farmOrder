@@ -19,7 +19,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <!-- Google Font: Prompt -->
-    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     
     <!-- Canvas Confetti -->
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -85,47 +85,7 @@
         const db = firebase.firestore();
         const storage = firebase.storage();
 
-        // Audio Context instance with auto-unlock on first user interaction for staff devices
-        let globalAudioCtx = null;
-        const getAudioContext = () => {
-            if (!globalAudioCtx) {
-                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-                if (AudioContextClass) {
-                    globalAudioCtx = new AudioContextClass();
-                }
-            }
-            if (globalAudioCtx && globalAudioCtx.state === 'suspended') {
-                globalAudioCtx.resume();
-            }
-            return globalAudioCtx;
-        };
-
-        const playAlertSound = () => {
-            try {
-                const ctx = getAudioContext();
-                if (!ctx) return;
-                
-                [0, 0.2, 0.4, 0.6, 0.8].forEach(delay => {
-                    const osc = ctx.createOscillator();
-                    const gain = ctx.createGain();
-                    osc.type = 'triangle';
-                    osc.frequency.setValueAtTime(987.77, ctx.currentTime + delay);
-                    osc.frequency.exponentialRampToValueAtTime(1975.53, ctx.currentTime + delay + 0.16);
-                    
-                    gain.gain.setValueAtTime(0.8, ctx.currentTime + delay);
-                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + delay + 0.18);
-                    
-                    osc.connect(gain);
-                    gain.connect(ctx.destination);
-                    
-                    osc.start(ctx.currentTime + delay);
-                    osc.stop(ctx.currentTime + delay + 0.19);
-                });
-            } catch (e) {
-                console.warn("Audio Alert Error:", e);
-            }
-        };
-
+        // Helper for precise float calculations (0.5 kg rounding)
         const roundStep = (num) => Math.round((num + Number.EPSILON) * 10) / 10;
 
         async function compressImageToBlob(fileOrDataUrl, maxWidth = 800, maxHeight = 800, quality = 0.8) {
@@ -143,7 +103,7 @@
                     } else {
                         if (height > maxHeight) {
                             width = Math.round((width * maxHeight) / height);
-                            width = maxHeight;
+                            height = maxHeight;
                         }
                     }
 
@@ -182,47 +142,38 @@
                 return fileOrDataUrl;
             }
 
-            // Raw upload option for lossless image files (e.g. Custom QR Code)
-            if (options.rawUpload && (fileOrDataUrl instanceof File || fileOrDataUrl instanceof Blob)) {
-                try {
-                    const filename = `${folderName}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}_${fileOrDataUrl.name || 'qr.png'}`;
-                    const ref = storage.ref().child(filename);
-                    const uploadTask = ref.put(fileOrDataUrl);
-                    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Storage Timeout")), 4000));
-                    const snapshot = await Promise.race([uploadTask, timeoutPromise]);
-                    return await snapshot.ref.getDownloadURL();
-                } catch (rawErr) {
-                    console.warn("Raw upload fallback to compressed blob:", rawErr);
-                }
-            }
-
-            const maxWidth = options.maxWidth || 800;
-            const maxHeight = options.maxHeight || 800;
-            const quality = options.quality !== undefined ? options.quality : 0.8;
-
-            let compressedDataUrl = null;
+            const rawUpload = options.rawUpload || false;
             let blob = null;
+            let dataUrlFallback = null;
 
-            try {
-                const compressed = await compressImageToBlob(fileOrDataUrl, maxWidth, maxHeight, quality);
-                compressedDataUrl = compressed.dataUrl;
-                blob = compressed.blob;
-            } catch (err) {
-                console.error("Compression error:", err);
-                if (typeof fileOrDataUrl === 'string') return fileOrDataUrl;
-                throw err;
+            if (rawUpload && (fileOrDataUrl instanceof File || fileOrDataUrl instanceof Blob)) {
+                blob = fileOrDataUrl;
+            } else {
+                try {
+                    const compressed = await compressImageToBlob(fileOrDataUrl, options.maxWidth || 800, options.maxHeight || 800, options.quality || 0.8);
+                    blob = compressed.blob;
+                    dataUrlFallback = compressed.dataUrl;
+                } catch (err) {
+                    if (typeof fileOrDataUrl === 'string') return fileOrDataUrl;
+                    throw err;
+                }
             }
 
             try {
                 const filename = `${folderName}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}.jpg`;
                 const ref = storage.ref().child(filename);
+                
                 const uploadTask = ref.put(blob, { contentType: 'image/jpeg' });
-                const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Storage Timeout")), 3000));
+                const timeoutPromise = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error("Storage Timeout")), 4000)
+                );
+                
                 const snapshot = await Promise.race([uploadTask, timeoutPromise]);
-                return await snapshot.ref.getDownloadURL();
+                const downloadUrl = await snapshot.ref.getDownloadURL();
+                return downloadUrl;
             } catch (storageError) {
-                console.warn("Storage fallback used inline DataURL:", storageError);
-                return compressedDataUrl;
+                console.warn("Storage upload fallback used inline DataURL:", storageError);
+                return dataUrlFallback || (typeof fileOrDataUrl === 'string' ? fileOrDataUrl : null);
             }
         }
 
@@ -277,7 +228,7 @@
             { id: '6', name: 'บัตเตอร์เฮด (Butterhead)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 18, unit: 'กก.', image: 'https://images.unsplash.com/photo-1556801712-76c8eb07ebb1?auto=format&fit=crop&w=400&q=80', desc: 'ผักปลอดสาร ใบนุ่มละมุน หวานธรรมชาติ ไม่มีความขม' },
             { id: '7', name: 'ผักเคลสด (Organic Kale)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 12, unit: 'กก.', image: 'https://images.unsplash.com/photo-1524179091875-bf98a9a6ae57?auto=format&fit=crop&w=400&q=80', desc: 'ราชินีแห่งผักใบเขียวปลอดสาร คุณประโยชน์สูง วิตามินแน่น' },
             { id: '8', name: 'ผักสลัดรวม (Mixed Salad)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 50, unit: 'กก.', image: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=400&q=80', desc: 'ผักปลอดสารสลัดรวมมิตร คละชนิด สด กรอบ พร้อมทาน' },
-            { id: '9', name: 'น้ำเคลปั่นสด (ขนาด 300 ml)', category: 'drink', priceRetail: 50, priceWholesale: 50, stock: 40, unit: 'ขวด', image: 'https://images.unsplash.com/photo-1610970881699-44a5587cabec?auto=format&fit=crop&w=400&q=80', desc: 'น้ำเคลปั่นสกัดสด ขนาด 300 ml เข้มข้น สดชื่น ปลดสาร 100%' }
+            { id: '9', name: 'น้ำเคลปั่นสด (ขนาด 300 ml)', category: 'drink', priceRetail: 50, priceWholesale: 50, stock: 40, unit: 'ขวด', image: 'https://images.unsplash.com/photo-1610970881699-44a5587cabec?auto=format&fit=crop&w=400&q=80', desc: 'น้ำเคลปั่นสกัดสด ขนาด 300 ml เข้มข้น สดชื่น ปลอดสาร 100%' }
         ];
 
         function App() {
@@ -290,9 +241,6 @@
             const [isSubmitting, setIsSubmitting] = React.useState(false);
             const [isFirebaseConnected, setIsFirebaseConnected] = React.useState(false);
 
-            // Audio Alert state flag
-            const isInitialOrderLoad = React.useRef(true);
-
             // Checkout state
             const [custName, setCustName] = React.useState('');
             const [custPhone, setCustPhone] = React.useState('');
@@ -302,20 +250,25 @@
             const [slipPreview, setSlipPreview] = React.useState('');
             const [slipFile, setSlipFile] = React.useState(null);
 
-            // Toast Modal State
+            // Notification Modal State
             const [toastModal, setToastModal] = React.useState({ show: false, title: '', message: '', type: 'info' });
 
             // Backoffice State
             const [adminPin, setAdminPin] = React.useState('');
             const [isAdminLoggedIn, setIsAdminLoggedIn] = React.useState(false);
-            const [userRole, setUserRole] = React.useState(null);
+            const [userRole, setUserRole] = React.useState(null); // 'admin' | 'staff'
             const [activeStaffName, setActiveStaffName] = React.useState('');
             const [masterAdminPin, setMasterAdminPin] = React.useState('1234');
             const [staffList, setStaffList] = React.useState([
                 { id: 1, name: 'พนักงานแพ็คผัก 1', pin: '1111' },
                 { id: 2, name: 'พนักงานจัดส่ง 2', pin: '2222' }
             ]);
-            const [adminTab, setAdminTab] = React.useState('active');
+            const [adminTab, setAdminTab] = React.useState('active'); // 'active' | 'completed' | 'inventory' | 'reports' | 'settings'
+
+            // Editing Wholesale Customer State
+            const [editingWholesaleId, setEditingWholesaleId] = React.useState(null);
+            const [editWholesaleName, setEditWholesaleName] = React.useState('');
+            const [editWholesalePhone, setEditWholesalePhone] = React.useState('');
 
             // Settings State
             const [farmName, setFarmName] = React.useState('เกื้อบุญฟาร์ม (Kuaboon Farm)');
@@ -335,33 +288,86 @@
             ]);
             const [newWholesaleName, setNewWholesaleName] = React.useState('');
             const [newWholesalePhone, setNewWholesalePhone] = React.useState('');
-
-            const [editingWholesaleId, setEditingWholesaleId] = React.useState(null);
-            const [editWholesaleName, setEditWholesaleName] = React.useState('');
-            const [editWholesalePhone, setEditWholesalePhone] = React.useState('');
-
             const [newStaffName, setNewStaffName] = React.useState('');
             const [newStaffPin, setNewStaffPin] = React.useState('');
 
             // Modals State
             const [selectedOrderDetails, setSelectedOrderDetails] = React.useState(null);
             const [showCartDrawer, setShowCartDrawer] = React.useState(false);
-            const [cancelModalOrder, setCancelModalOrder] = React.useState(null);
-            const [deleteModalOrder, setDeleteModalOrder] = React.useState(null);
+
+            // Refs for event listeners & order detection
+            const audioCtxRef = React.useRef(null);
+            const viewRef = React.useRef(view);
+            const isAdminLoggedInRef = React.useRef(isAdminLoggedIn);
+            const isInitialOrderLoadRef = React.useRef(true);
+
+            React.useEffect(() => {
+                viewRef.current = view;
+            }, [view]);
+
+            React.useEffect(() => {
+                isAdminLoggedInRef.current = isAdminLoggedIn;
+            }, [isAdminLoggedIn]);
+
+            // Loud Audio alert player
+            const playLoudAlert = () => {
+                try {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    if (!AudioContext) return;
+                    if (!audioCtxRef.current) {
+                        audioCtxRef.current = new AudioContext();
+                    }
+                    const ctx = audioCtxRef.current;
+                    if (ctx.state === 'suspended') {
+                        ctx.resume();
+                    }
+
+                    const now = ctx.currentTime;
+                    // Multi-tone chime sequence
+                    const freqs = [523.25, 659.25, 783.99, 1046.50, 659.25, 1046.50];
+                    freqs.forEach((freq, idx) => {
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(freq, now + idx * 0.15);
+                        gain.gain.setValueAtTime(0.5, now + idx * 0.15);
+                        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.15 + 0.35);
+                        
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        
+                        osc.start(now + idx * 0.15);
+                        osc.stop(now + idx * 0.15 + 0.35);
+                    });
+                } catch (err) {
+                    console.warn("Audio play alert error:", err);
+                }
+            };
+
+            // Auto-unlock Web Audio on first user interaction anywhere
+            React.useEffect(() => {
+                const handleUnlockAudio = () => {
+                    if (!audioCtxRef.current) {
+                        const AudioContext = window.AudioContext || window.webkitAudioContext;
+                        if (AudioContext) audioCtxRef.current = new AudioContext();
+                    }
+                    if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+                        audioCtxRef.current.resume();
+                    }
+                };
+                window.addEventListener('click', handleUnlockAudio);
+                window.addEventListener('touchstart', handleUnlockAudio);
+                return () => {
+                    window.removeEventListener('click', handleUnlockAudio);
+                    window.removeEventListener('touchstart', handleUnlockAudio);
+                };
+            }, []);
 
             const showToast = (title, message, type = 'info') => {
                 setToastModal({ show: true, title, message, type });
             };
 
             React.useEffect(() => {
-                const unlockAudio = () => {
-                    getAudioContext();
-                    window.removeEventListener('click', unlockAudio);
-                    window.removeEventListener('touchstart', unlockAudio);
-                };
-                window.addEventListener('click', unlockAudio);
-                window.addEventListener('touchstart', unlockAudio);
-
                 const unsubProducts = db.collection('products').onSnapshot(async (snapshot) => {
                     setIsFirebaseConnected(true);
                     let items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -392,14 +398,17 @@
 
                 const unsubOrders = db.collection('orders').orderBy('createdAt', 'desc').onSnapshot(snapshot => {
                     setIsFirebaseConnected(true);
-                    
-                    // Trigger loud audio alert on new incoming order
-                    if (!isInitialOrderLoad.current && snapshot.docChanges().some(change => change.type === 'added')) {
-                        playAlertSound();
-                    }
-                    isInitialOrderLoad.current = false;
-
                     const ords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    
+                    // Sound alert ONLY in backoffice for logged-in Admin/Staff
+                    if (isInitialOrderLoadRef.current) {
+                        isInitialOrderLoadRef.current = false;
+                    } else {
+                        const hasNewOrder = snapshot.docChanges().some(change => change.type === 'added');
+                        if (hasNewOrder && viewRef.current === 'backoffice' && isAdminLoggedInRef.current) {
+                            playLoudAlert();
+                        }
+                    }
                     setOrders(ords);
                 }, err => {
                     console.warn("Firebase Orders Sync Warning:", err);
@@ -469,13 +478,13 @@
                 if (existing) {
                     const newQty = roundStep(existing.qty + step);
                     if (newQty > product.stock) {
-                        showToast('⚠️ สต็อกไม่พอ', `ผัก ${product.name} เหลือสต็อกแค่ ${product.stock} ${product.unit} ครับ`, 'error');
+                        showToast('⚠️ สต็อกไม่พอ', `ขณะนี้ ${product.name} มีสต็อกพร้อมส่ง ${product.stock} ${product.unit}`, 'error');
                         return;
                     }
                     setCart(cart.map(item => item.id === product.id ? { ...item, qty: newQty } : item));
                 } else {
                     if (step > product.stock) {
-                        showToast('⚠️ สต็อกไม่พอ', `ผัก ${product.name} เหลือสต็อกแค่ ${product.stock} ${product.unit} ครับ`, 'error');
+                        showToast('⚠️ สต็อกไม่พอ', `ขณะนี้ ${product.name} มีสต็อกพร้อมส่ง ${product.stock} ${product.unit}`, 'error');
                         return;
                     }
                     setCart([...cart, { ...product, qty: step }]);
@@ -491,7 +500,7 @@
                     if (item.id === id) {
                         const newQty = roundStep(item.qty + step);
                         if (newQty > targetProduct.stock) {
-                            showToast('⚠️ สต็อกไม่พอ', `เหลือสต็อกแค่ ${targetProduct.stock} ${targetProduct.unit} ครับ`, 'error');
+                            showToast('⚠️ สต็อกไม่พอ', `ไม่สามารถเพิ่มได้เกินสต็อกคงเหลือ (${targetProduct.stock} ${targetProduct.unit})`, 'error');
                             return item;
                         }
                         return newQty > 0 ? { ...item, qty: newQty } : null;
@@ -513,6 +522,8 @@
                         },
                         () => showToast('📍 ไม่สามารถดึง GPS ได้', 'กรุณาวางลิงก์ Google Maps โดยตรงในช่องใส่พิกัด', 'error')
                     );
+                } else {
+                    showToast('⚠️ ไม่รองรับ GPS', 'เบราว์เซอร์ของคุณน้าไม่รองรับการดึงพิกัดอัตโนมัติ', 'error');
                 }
             };
 
@@ -541,11 +552,10 @@
                         uploadedSlipUrl = await uploadBlobToStorage(slipFile || slipPreview, 'payment_slips');
                     }
 
-                    // Doc Numbering: 001/YYYYMMDD/2026
-                    const docNum = String(orders.length + 1).padStart(3, '0');
-                    const formattedDateStr = new Date().toISOString().slice(0,10).replace(/-/g,'');
-                    const currentYear = new Date().getFullYear();
-                    const newDocNo = `${docNum}/${formattedDateStr}/${currentYear}`;
+                    const todayStr = new Date().toISOString().slice(0,10).replace(/-/g,'');
+                    const yearNum = new Date().getFullYear();
+                    const nextNum = String(orders.length + 1).padStart(3, '0');
+                    const newDocNo = `${nextNum}/${todayStr}/${yearNum}`;
                     const orderId = `ORD-${Date.now()}`;
 
                     const newOrder = {
@@ -558,7 +568,6 @@
                         mapsUrl: custMapsUrl,
                         paymentType: isCreditOrder ? 'credit' : 'promptpay',
                         isCredit: isCreditOrder,
-                        isWholesaleCustomer: customerType === 'wholesale',
                         items: cart.map(i => ({ id: i.id, name: i.name, qty: roundStep(i.qty), price: getItemPrice(i), unit: i.unit })),
                         subtotal: cartSubtotal,
                         shippingFee: shippingFee,
@@ -571,7 +580,7 @@
 
                     await db.collection('orders').doc(orderId).set(newOrder);
 
-                    // Real-time stock deduction
+                    // Update stock
                     const batch = db.batch();
                     cart.forEach(cItem => {
                         const pRef = db.collection('products').doc(cItem.id);
@@ -583,6 +592,11 @@
                     });
                     await batch.commit();
 
+                    // Clear customer inputs & cart cleanly so next order starts fresh
+                    setCustName('');
+                    setCustPhone('');
+                    setCustAddress('');
+                    setCustMapsUrl('');
                     setCart([]);
                     setShowCartDrawer(false);
                     setSlipPreview('');
@@ -595,81 +609,78 @@
                     setView('tracking');
                     showToast('🎉 สั่งซื้อผักสดสำเร็จ!', `ส่งรายการคำสั่งซื้อเลขที่ ${newDocNo} เข้าสู่ระบบเรียบร้อยแล้ว`, 'success');
                 } catch (err) {
+                    console.error("Order submit error:", err);
                     showToast('❌ เกิดข้อผิดพลาด', 'ไม่สามารถบันทึกออเดอร์ได้ กรุณาตรวจสอบสิทธิ์ Firestore/Storage Rules', 'error');
                 } finally {
                     setIsSubmitting(false);
                 }
             };
 
-            const handleAttemptCancel = (order) => {
+            const handleCancelOrder = async (order) => {
                 if (order.slipImage) {
-                    showToast(
-                        '⛔ ไม่สามารถยกเลิกได้', 
-                        'ออเดอร์นี้ได้ทำการแนบสลิปชำระเงินและตัดยอดเงินเรียบร้อยแล้ว\n\nหากต้องการยกเลิกหรือแก้ไข กรุณาติดต่อทางเกื้อบุญฟาร์มโดยตรง เพื่อป้องกันปัญหาเรื่องการคืนเงินครับ', 
-                        'error'
-                    );
+                    showToast('⛔ ไม่สามารถยกเลิกได้', 'เนื่องจากมีการแนบสลิปโอนเงินและทำการตัดยอดเงินเรียบร้อยแล้ว หากต้องการเปลี่ยนแปลงกรุณาติดต่อฟาร์มโดยตรง', 'error');
                     return;
                 }
-                setCancelModalOrder(order);
-            };
 
-            const executeCancelOrder = async (order) => {
-                if (!order || order.status !== 'pending') return;
-                setIsSubmitting(true);
-                try {
-                    const batch = db.batch();
-                    const orderRef = db.collection('orders').doc(order.id);
-                    batch.update(orderRef, { 
-                        status: 'cancelled',
-                        cancelledAt: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-
-                    order.items.forEach(item => {
-                        const pRef = db.collection('products').doc(item.id);
-                        const currentProd = products.find(p => p.id === item.id);
-                        if (currentProd) {
-                            const newStock = roundStep((currentProd.stock || 0) + item.qty);
-                            batch.update(pRef, { stock: newStock });
-                        }
-                    });
-
-                    await batch.commit();
-                    setCancelModalOrder(null);
-                    showToast('❌ ยกเลิกออเดอร์สำเร็จ', `ยกเลิกรายการ ${order.docNo} และคืนจำนวนผักสดเข้าคลังเรียบร้อยแล้วครับ`, 'success');
-                } catch (err) {
-                    showToast('❌ ไม่สามารถยกเลิกได้', 'เกิดข้อผิดพลาดในการยกเลิกออเดอร์ กรุณาลองใหม่อีกครั้ง', 'error');
-                } finally {
-                    setIsSubmitting(false);
+                if (!window.confirm(`⚠️ ยืนยันยกเลิกออเดอร์เลขที่ ${order.docNo} หรือไม่?\nระบบจะทำการคืนผักสดเข้าสต็อกให้อัตโนมัติ`)) {
+                    return;
                 }
-            };
 
-            const executeAdminDeleteOrder = async (order) => {
-                if (!order) return;
-                setIsSubmitting(true);
                 try {
                     const batch = db.batch();
                     const orderRef = db.collection('orders').doc(order.id);
-                    batch.delete(orderRef);
+                    batch.update(orderRef, { status: 'cancelled' });
 
-                    if (order.status !== 'cancelled' && order.items && Array.isArray(order.items)) {
+                    if (order.items) {
                         order.items.forEach(item => {
-                            const pRef = db.collection('products').doc(item.id);
+                            const prodRef = db.collection('products').doc(item.id);
                             const currentProd = products.find(p => p.id === item.id);
                             if (currentProd) {
-                                const newStock = roundStep((currentProd.stock || 0) + item.qty);
-                                batch.update(pRef, { stock: newStock });
+                                const restoredStock = roundStep(currentProd.stock + (item.qty || 0));
+                                batch.update(prodRef, { stock: restoredStock });
                             }
                         });
                     }
 
                     await batch.commit();
-                    setDeleteModalOrder(null);
-                    showToast('🗑️ ลบออเดอร์สำเร็จ!', `ลบคำสั่งซื้อเลขที่ ${order.docNo} และคืนผักสดเข้าสต็อกเรียบร้อยแล้ว`, 'success');
+                    showToast('✅ ยกเลิกออเดอร์สำเร็จ', 'ทำการยกเลิกออเดอร์และคืนจำนวนผักสดเข้าสต็อกเรียบร้อยแล้ว', 'success');
                 } catch (err) {
-                    console.error("Admin delete error:", err);
-                    showToast('❌ ลบไม่สำเร็จ', 'เกิดข้อผิดพลาดในการลบออเดอร์ออกจากคลาวด์', 'error');
-                } finally {
-                    setIsSubmitting(false);
+                    console.error("Cancel order error:", err);
+                    showToast('❌ ยกเลิกไม่สำเร็จ', 'เกิดข้อผิดพลาดในการยกเลิกออเดอร์', 'error');
+                }
+            };
+
+            const handleDeleteOrderAdmin = async (order) => {
+                if (userRole !== 'admin') {
+                    showToast('🔒 สิทธิ์ไม่เพียงพอ', 'เฉพาะผู้บริหาร (Admin) เท่านั้นที่สามารถลบออเดอร์ได้', 'error');
+                    return;
+                }
+
+                if (!window.confirm(`⚠️ ยืนยันลบออเดอร์ ${order.docNo} ของคุณ ${order.customerName}?\nระบบจะทำการคืนจำนวนผักสดเข้าสต็อกให้อัตโนมัติ`)) {
+                    return;
+                }
+
+                try {
+                    const batch = db.batch();
+                    const orderRef = db.collection('orders').doc(order.id);
+                    batch.delete(orderRef);
+
+                    if (order.status !== 'cancelled' && order.items) {
+                        order.items.forEach(item => {
+                            const prodRef = db.collection('products').doc(item.id);
+                            const currentProd = products.find(p => p.id === item.id);
+                            if (currentProd) {
+                                const restoredStock = roundStep(currentProd.stock + (item.qty || 0));
+                                batch.update(prodRef, { stock: restoredStock });
+                            }
+                        });
+                    }
+
+                    await batch.commit();
+                    showToast('🗑️ ลบออเดอร์สำเร็จ!', `ลบรายการ ${order.docNo} และคืนผักเข้าสต็อกเรียบร้อยแล้ว`, 'success');
+                } catch (err) {
+                    console.error("Delete order error:", err);
+                    showToast('❌ ไม่สามารถลบได้', 'เกิดข้อผิดพลาดในการลบออเดอร์จาก Firebase', 'error');
                 }
             };
 
@@ -701,6 +712,7 @@
                     await db.collection('orders').doc(orderId).update({ status: newStatus });
                     showToast('✅ อัปเดตสถานะสำเร็จ', `เปลี่ยนสถานะออเดอร์เป็น "${newStatus}" เรียบร้อยแล้ว`, 'success');
                 } catch (err) {
+                    console.error("Update order status error:", err);
                     showToast('❌ อัปเดตไม่สำเร็จ', 'เกิดข้อผิดพลาดในการอัปเดตข้อมูล', 'error');
                 }
             };
@@ -712,6 +724,7 @@
                     await db.collection('orders').doc(orderId).update({ proofImage: uploadedUrl });
                     showToast('📸 แนบหลักฐานสำเร็จ!', 'บันทึกรูปภาพหลักฐานการจัดส่งเรียบร้อยแล้ว', 'success');
                 } catch (err) {
+                    console.error("Proof image upload error:", err);
                     showToast('❌ อัปโหลดไม่สำเร็จ', 'ไม่สามารถบันทึกรูปภาพได้', 'error');
                 }
             };
@@ -733,7 +746,33 @@
                     await db.collection('settings').doc('farm_config').set({ wholesaleWhitelist: updatedList }, { merge: true });
                     showToast('✅ เพิ่มร้านค้าสำเร็จ', `ลงทะเบียนคุณ/ร้าน ${newWholesaleName} เข้าระบบลูกค้าราคาส่งเรียบร้อยแล้ว`, 'success');
                 } catch (err) {
+                    console.error("Save wholesale error:", err);
                     showToast('❌ บันทึกไม่สำเร็จ', 'เกิดข้อผิดพลาดในการบันทึกข้อมูลลงคลาวด์', 'error');
+                }
+            };
+
+            const handleStartEditWholesale = (shop) => {
+                setEditingWholesaleId(shop.id);
+                setEditWholesaleName(shop.name);
+                setEditWholesalePhone(shop.phone);
+            };
+
+            const handleSaveEditWholesale = async (id) => {
+                if (!editWholesaleName.trim() || !editWholesalePhone.trim()) return;
+
+                const updatedList = wholesaleWhitelist.map(w => 
+                    w.id === id ? { ...w, name: editWholesaleName.trim(), phone: editWholesalePhone.trim() } : w
+                );
+
+                setWholesaleWhitelist(updatedList);
+                setEditingWholesaleId(null);
+
+                try {
+                    await db.collection('settings').doc('farm_config').set({ wholesaleWhitelist: updatedList }, { merge: true });
+                    showToast('✏️ แก้ไขข้อมูลสำเร็จ', 'อัปเดตชื่อและเบอร์โทรศัพท์ร้านค้าส่งเรียบร้อยแล้ว', 'success');
+                } catch (err) {
+                    console.error("Edit wholesale error:", err);
+                    showToast('❌ บันทึกไม่สำเร็จ', 'เกิดข้อผิดพลาดในการบันทึกข้อมูล', 'error');
                 }
             };
 
@@ -743,33 +782,8 @@
                 try {
                     await db.collection('settings').doc('farm_config').set({ wholesaleWhitelist: updatedList }, { merge: true });
                     showToast('🗑️ ลบรายชื่อเรียบร้อย', 'ลบร้านค้าออกจากระบบสิทธิ์ราคาส่งแล้ว', 'info');
-                } catch (err) {}
-            };
-
-            const handleStartEditWholesale = (shop) => {
-                setEditingWholesaleId(shop.id);
-                setEditWholesaleName(shop.name);
-                setEditWholesalePhone(shop.phone);
-            };
-
-            const handleSaveEditWholesale = async (e) => {
-                e.preventDefault();
-                if (!editWholesaleName.trim() || !editWholesalePhone.trim()) return;
-
-                const updatedList = wholesaleWhitelist.map(w => 
-                    w.id === editingWholesaleId 
-                        ? { ...w, name: editWholesaleName.trim(), phone: editWholesalePhone.trim() } 
-                        : w
-                );
-
-                setWholesaleWhitelist(updatedList);
-                setEditingWholesaleId(null);
-
-                try {
-                    await db.collection('settings').doc('farm_config').set({ wholesaleWhitelist: updatedList }, { merge: true });
-                    showToast('✅ แก้ไขข้อมูลสำเร็จ', `อัปเดตข้อมูลร้าน ${editWholesaleName} เรียบร้อยแล้ว`, 'success');
                 } catch (err) {
-                    showToast('❌ บันทึกไม่สำเร็จ', 'เกิดข้อผิดพลาดในการบันทึกข้อมูลลงคลาวด์', 'error');
+                    console.error("Delete wholesale error:", err);
                 }
             };
 
@@ -780,25 +794,40 @@
                     let qrUrl = customQrImage;
                     if (customQrFile) {
                         qrUrl = await uploadBlobToStorage(customQrFile, 'farm_settings', { rawUpload: true });
-                    } else if (customQrImage && customQrImage.startsWith('data:')) {
-                        qrUrl = await uploadBlobToStorage(customQrImage, 'farm_settings', { maxWidth: 1600, maxHeight: 1600, quality: 1.0 });
-                    } else if (!customQrImage) {
-                        qrUrl = '';
                     }
 
                     const settingsData = {
-                        farmName, taxId, farmAddress, farmPhone, promptpayNo, bankAccountNo,
-                        customQrImage: qrUrl, masterAdminPin, staffList, wholesaleWhitelist,
+                        farmName,
+                        taxId,
+                        farmAddress,
+                        farmPhone,
+                        promptpayNo,
+                        bankAccountNo,
+                        customQrImage: qrUrl || '',
+                        masterAdminPin,
+                        staffList,
+                        wholesaleWhitelist,
                         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                     };
 
                     await db.collection('settings').doc('farm_config').set(settingsData, { merge: true });
-                    showToast('💾 บันทึกตั้งค่าสำเร็จ', 'ข้อมูลฟาร์มและรายชื่อลูกค้าราคาส่งอัปเดตขึ้นคลาวด์เรียบร้อยแล้ว', 'success');
+                    showToast('💾 บันทึกตั้งค่าสำเร็จ', 'ข้อมูลฟาร์มและรูปภาพอัปเดตขึ้นคลาวด์เรียบร้อยแล้ว', 'success');
                 } catch (err) {
                     console.error("Save settings error:", err);
                     showToast('❌ บันทึกไม่สำเร็จ', 'กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตหรือสิทธิ์ Firebase Rules', 'error');
                 } finally {
                     setIsSavingSettings(false);
+                }
+            };
+
+            const handleClearCustomQr = async () => {
+                setCustomQrImage('');
+                setCustomQrFile(null);
+                try {
+                    await db.collection('settings').doc('farm_config').set({ customQrImage: '' }, { merge: true });
+                    showToast('🗑️ ลบรูป QR Code สำเร็จ', 'ระบบรีเซ็ตกลับไปใช้ QR Code พร้อมเพย์อัตโนมัติแล้ว', 'info');
+                } catch (err) {
+                    console.error("Clear QR error:", err);
                 }
             };
 
@@ -808,10 +837,9 @@
                     return;
                 }
                 let csvContent = "\uFEFF";
-                csvContent += "เลขที่เอกสาร,วันที่,ชื่อลูกค้า,เบอร์โทรศัพท์,ยอดเงินรวม,ประเภทการชำระ,ชนิดเอกสาร,สถานะ\n";
+                csvContent += "เลขที่เอกสาร,วันที่,ชื่อลูกค้า,เบอร์โทรศัพท์,ยอดเงินรวม,ประเภทการชำระ,สถานะ\n";
                 orders.forEach(o => {
-                    const docType = (o.isCredit || o.isWholesaleCustomer) ? 'ใบส่งสินค้า' : 'ใบเสร็จรับเงิน';
-                    csvContent += `"${o.docNo}","${o.date}","${o.customerName}","${o.phone}","${o.total}","${o.isCredit ? 'เครดิต' : 'สด/โอน'}","${docType}","${o.status}"\n`;
+                    csvContent += `"${o.docNo}","${o.date}","${o.customerName}","${o.phone}","${o.total}","${o.isCredit ? 'เครดิต' : 'สด/โอน'}","${o.status}"\n`;
                 });
                 const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
                 const link = document.createElement('a');
@@ -825,7 +853,6 @@
 
             return (
                 <div className="min-h-screen bg-slate-50 text-slate-800 pb-20 md:pb-8">
-                    {/* Top Bar Header */}
                     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
                         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
                             <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('store')}>
@@ -839,152 +866,148 @@
                             </div>
 
                             <div className="flex items-center gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        playAlertSound();
-                                        showToast('🔊 ทดสอบเสียงเตือน', 'เล่นเสียงสัญญาณเตือนออเดอร์ใหม่เรียบร้อยแล้วครับ!', 'success');
-                                    }}
-                                    className="px-2.5 py-1.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 hover:bg-amber-200 transition-all border border-amber-300 flex items-center gap-1"
-                                >
-                                    <span>🔊</span>
-                                    <span className="hidden sm:inline">ทดสอบเสียง</span>
-                                </button>
-
                                 <button 
                                     type="button"
                                     onClick={() => showToast(
                                         isFirebaseConnected ? '🟢 เชื่อมต่อคลาวด์ Firebase แล้ว' : '🔴 ยังไม่พบการเชื่อมต่อ Firestore',
-                                        isFirebaseConnected ? 'ระบบเชื่อมต่อโปรเจกต์ orderkueaboon สำเร็จเรียบร้อย ออเดอร์และสต็อกจะซิงค์สดๆ ทันที' : 'ไปที่ Firebase Console ตั้งค่า Firestore Rules เป็น allow read, write: if true;',
+                                        isFirebaseConnected 
+                                            ? 'ระบบเชื่อมต่อโปรเจกต์ orderkueaboon สำเร็จเรียบร้อย ออเดอร์และสต็อกจะซิงค์สดๆ ทันที' 
+                                            : 'วิธีแก้ไข:\n1. เข้า console.firebase.google.com เลือก orderkueaboon\n2. ไปที่ Firestore Database แล้วกด "Create database"\n3. ไปที่แท็บ Rules ตั้งค่า allow read, write: if true;',
                                         isFirebaseConnected ? 'success' : 'error'
                                     )}
                                     className={`px-3 py-1.5 rounded-full text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-sm ${
-                                        isFirebaseConnected ? 'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100' : 'bg-rose-50 text-rose-800 border border-rose-300 hover:bg-rose-100 animate-pulse'
+                                        isFirebaseConnected 
+                                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100' 
+                                        : 'bg-rose-50 text-rose-800 border border-rose-300 hover:bg-rose-100 animate-pulse'
                                     }`}
                                 >
                                     <span className="relative flex h-2 w-2">
                                         <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isFirebaseConnected ? 'bg-emerald-400' : 'bg-rose-400'}`}></span>
                                         <span className={`relative inline-flex rounded-full h-2 w-2 ${isFirebaseConnected ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
                                     </span>
-                                    <span>{isFirebaseConnected ? 'Firebase 🟢' : 'Firebase 🔴'}</span>
+                                    <span className="hidden sm:inline">{isFirebaseConnected ? 'เชื่อมต่อ Firebase แล้ว 🟢' : 'ยังไม่ได้เชื่อมต่อ 🔴'}</span>
+                                    <span className="sm:hidden">{isFirebaseConnected ? 'Firebase 🟢' : 'Firebase 🔴'}</span>
                                 </button>
 
                                 <div className="hidden md:flex items-center gap-2">
-                                    <button onClick={() => setView('store')} className={`px-4 py-2 rounded-2xl font-bold text-xs transition-all ${view === 'store' ? 'bg-farm-800 text-white shadow-md' : 'text-slate-600 hover:bg-slate-100'}`}>🛒 หน้าร้านสั่งผัก</button>
-                                    <button onClick={() => setView('tracking')} className={`px-4 py-2 rounded-2xl font-bold text-xs transition-all ${view === 'tracking' ? 'bg-farm-800 text-white shadow-md' : 'text-slate-600 hover:bg-slate-100'}`}>🚚 ติดตามออเดอร์</button>
-                                    <button onClick={() => setView('backoffice')} className={`px-4 py-2 rounded-2xl font-bold text-xs transition-all ${view === 'backoffice' ? 'bg-farm-800 text-white shadow-md' : 'text-slate-600 hover:bg-slate-100'}`}>👤🔧 หลังบ้าน / ปฏิบัติการ</button>
+                                    <button 
+                                        onClick={() => setView('store')}
+                                        className={`px-4 py-2 rounded-2xl font-bold text-xs transition-all ${view === 'store' ? 'bg-farm-800 text-white shadow-md shadow-farm-800/30' : 'text-slate-600 hover:bg-slate-100'}`}
+                                    >
+                                        🛒 หน้าร้านสั่งผัก
+                                    </button>
+                                    <button 
+                                        onClick={() => setView('tracking')}
+                                        className={`px-4 py-2 rounded-2xl font-bold text-xs transition-all ${view === 'tracking' ? 'bg-farm-800 text-white shadow-md shadow-farm-800/30' : 'text-slate-600 hover:bg-slate-100'}`}
+                                    >
+                                        🚚 ติดตามออเดอร์
+                                    </button>
+                                    <button 
+                                        onClick={() => setView('backoffice')}
+                                        className={`px-4 py-2 rounded-2xl font-bold text-xs transition-all ${view === 'backoffice' ? 'bg-farm-800 text-white shadow-md shadow-farm-800/30' : 'text-slate-600 hover:bg-slate-100'}`}
+                                    >
+                                        👤🔧 หลังบ้าน / ปฏิบัติการ
+                                    </button>
                                 </div>
                             </div>
                         </div>
                     </header>
 
-                    {/* Notification Toast Modal */}
+                    {}
                     {toastModal.show && (
                         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
                             <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl border text-center">
-                                <div className={`w-14 h-14 rounded-2xl mx-auto flex items-center justify-center text-2xl font-bold ${toastModal.type === 'success' ? 'bg-emerald-100 text-emerald-800' : toastModal.type === 'error' ? 'bg-rose-100 text-rose-800' : 'bg-blue-100 text-blue-800'}`}>
+                                <div className={`w-14 h-14 rounded-2xl mx-auto flex items-center justify-center text-2xl font-bold ${
+                                    toastModal.type === 'success' ? 'bg-emerald-100 text-emerald-800' :
+                                    toastModal.type === 'error' ? 'bg-rose-100 text-rose-800' : 'bg-blue-100 text-blue-800'
+                                }`}>
                                     {toastModal.type === 'success' ? '✅' : toastModal.type === 'error' ? '❌' : '💡'}
                                 </div>
                                 <div className="space-y-1">
                                     <h3 className="font-extrabold text-slate-900 text-base">{toastModal.title}</h3>
                                     <p className="text-slate-600 text-xs leading-relaxed whitespace-pre-line text-left bg-slate-50 p-3 rounded-xl border">{toastModal.message}</p>
                                 </div>
-                                <button onClick={() => setToastModal({ ...toastModal, show: false })} className="w-full py-2.5 bg-slate-900 text-white rounded-xl font-bold text-xs shadow hover:bg-slate-800">ตกลง / ปิดหน้าต่าง</button>
+                                <button 
+                                    onClick={() => setToastModal({ ...toastModal, show: false })}
+                                    className="w-full py-2.5 bg-slate-900 text-white rounded-xl font-bold text-xs shadow hover:bg-slate-800"
+                                >
+                                    ตกลง / ปิดหน้าต่าง
+                                </button>
                             </div>
                         </div>
                     )}
 
-                    {/* Order Cancellation Confirmation Modal */}
-                    {cancelModalOrder && (
-                        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-                            <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl border text-center">
-                                <div className="w-14 h-14 bg-rose-100 text-rose-600 rounded-2xl mx-auto flex items-center justify-center text-2xl font-bold">⚠️</div>
-                                <div className="space-y-1">
-                                    <h3 className="font-extrabold text-slate-900 text-base">ยืนยันการยกเลิกออเดอร์?</h3>
-                                    <p className="text-slate-600 text-xs bg-rose-50 p-3 rounded-xl border border-rose-100 text-left">
-                                        คำสั่งซื้อเลขที่ <strong>{cancelModalOrder.docNo}</strong> จะถูกยกเลิก และระบบจะ <strong>คืนผักสดเข้าสต็อกให้อัตโนมัติ</strong> ครับ
-                                    </p>
-                                </div>
-                                <div className="flex gap-2">
-                                    <button onClick={() => setCancelModalOrder(null)} className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-200">ไม่ยกเลิก</button>
-                                    <button onClick={() => executeCancelOrder(cancelModalOrder)} disabled={isSubmitting} className="flex-1 py-2.5 bg-rose-600 text-white rounded-xl font-bold text-xs hover:bg-rose-700 shadow">{isSubmitting ? '⏳ กำลังยกเลิก...' : '❌ ยืนยันยกเลิก'}</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Admin Delete Order Confirmation Modal */}
-                    {deleteModalOrder && (
-                        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-                            <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl border text-center">
-                                <div className="w-14 h-14 bg-rose-600 text-white rounded-2xl mx-auto flex items-center justify-center text-2xl font-bold shadow-lg">🗑️</div>
-                                <div className="space-y-1">
-                                    <h3 className="font-extrabold text-slate-900 text-base">👑 [ผู้บริหาร] ยืนยันลบออเดอร์ถาวร?</h3>
-                                    <div className="text-slate-600 text-xs bg-rose-50 p-3 rounded-xl border border-rose-200 text-left space-y-1">
-                                        <p>• เลขที่เอกสาร: <strong className="text-rose-900">{deleteModalOrder.docNo}</strong></p>
-                                        <p>• ลูกค้า: คุณ <strong>{deleteModalOrder.customerName}</strong></p>
-                                        <p className="text-emerald-700 font-bold pt-1 border-t border-rose-200">⚡ ระบบจะดึงผักสดทั้งหมดในออเดอร์นี้คืนเข้าคลังสต็อกให้อัตโนมัติครับ</p>
-                                    </div>
-                                </div>
-                                <div className="flex gap-2">
-                                    <button onClick={() => setDeleteModalOrder(null)} className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-200">ยกเลิก / ไม่ลบ</button>
-                                    <button onClick={() => executeAdminDeleteOrder(deleteModalOrder)} disabled={isSubmitting} className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-xs shadow">{isSubmitting ? '⏳ กำลังลบ...' : '🗑️ ยืนยันลบถาวร'}</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
+                    {/* Main Content Area */}
                     <main className="max-w-6xl mx-auto px-4 pt-4">
-                        {/* STORE VIEW */}
+                        {}
                         {view === 'store' && (
                             <div className="space-y-6">
                                 {/* Top Banner */}
                                 <div className="bg-gradient-to-r from-farm-800 to-emerald-600 text-white p-6 rounded-3xl shadow-lg relative overflow-hidden">
                                     <div className="relative z-10 space-y-2 max-w-xl">
-                                        <span className="bg-white/20 text-white text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider backdrop-blur-md">🌿 ผักสลัดสด ปลอดสารพิษ 100%</span>
+                                        <span className="bg-white/20 text-white text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider backdrop-blur-md">
+                                            🌿 ผักสลัดสด ปลอดสารพิษ 100%
+                                        </span>
                                         <h2 className="text-2xl sm:text-3xl font-extrabold leading-tight">สด กรอบ ส่งตรงจากแปลงทุกวัน</h2>
-                                        <p className="text-emerald-100 text-xs sm:text-sm">สั่งผักรวมครบ 5 กก. ขึ้นไป ปรับราคาส่ง 100.-/กก. ให้อัตโนมัติ (เลือกสั่งขั้นละ 0.5 กก. ได้)</p>
+                                        <p className="text-emerald-100 text-xs sm:text-sm">
+                                            สั่งผักรวมครบ 5 กก. ขึ้นไป ปรับราคาส่ง 100.-/กก. ให้อัตโนมัติ (เลือกสั่งขั้นละ 0.5 กก. ได้)
+                                        </p>
                                     </div>
                                     <div className="absolute -right-6 -bottom-10 opacity-20 text-9xl">🥗</div>
                                 </div>
 
-                                {/* Customer Tier Picker (High contrast active green) */}
+                                {/* Customer Tier Picker */}
                                 <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
                                     <div>
                                         <h3 className="font-extrabold text-slate-900 text-sm">👤 เลือกระดับประเภทลูกค้า:</h3>
                                         <p className="text-slate-500 text-xs">ร้านค้า/ร้านอาหาร รับสิทธิ์ราคาส่ง 100.- ตั้งแต่กิโลกรัมแรก</p>
                                     </div>
-                                    <div className="flex bg-slate-100 p-1 rounded-2xl w-full sm:w-auto gap-1">
+                                    <div className="flex bg-slate-100 p-1.5 rounded-2xl w-full sm:w-auto gap-1">
                                         <button 
                                             type="button"
                                             onClick={() => setCustomerType('retail')}
-                                            className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-extrabold transition-all ${
+                                            className={`flex-1 sm:flex-initial px-5 py-2 rounded-xl text-xs font-extrabold transition-all shadow-sm ${
                                                 customerType === 'retail' 
-                                                ? 'bg-farm-800 text-white shadow-md shadow-farm-800/30' 
-                                                : 'text-slate-600 hover:text-slate-900'
+                                                ? 'bg-farm-800 text-white shadow-farm-800/30 ring-2 ring-farm-800' 
+                                                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
                                             }`}
                                         >
-                                            ลูกค้าทั่วไป
+                                            👤 ลูกค้าทั่วไป
                                         </button>
                                         <button 
                                             type="button"
                                             onClick={() => setCustomerType('wholesale')}
-                                            className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-extrabold transition-all ${
+                                            className={`flex-1 sm:flex-initial px-5 py-2 rounded-xl text-xs font-extrabold transition-all shadow-sm ${
                                                 customerType === 'wholesale' 
-                                                ? 'bg-farm-800 text-white shadow-md shadow-farm-800/30' 
-                                                : 'text-slate-600 hover:text-slate-900'
+                                                ? 'bg-farm-800 text-white shadow-farm-800/30 ring-2 ring-farm-800' 
+                                                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
                                             }`}
                                         >
-                                            ร้านค้า/ร้านอาหาร (ราคาส่ง 100.-)
+                                            🏪 ร้านค้า/ร้านอาหาร (ราคาส่ง 100.-)
                                         </button>
                                     </div>
                                 </div>
 
-                                {/* Category Tabs */}
+                                {}
                                 <div className="flex border-b border-slate-200 gap-2 overflow-x-auto hide-scrollbar">
-                                    <button onClick={() => setSelectedCategory('all')} className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${selectedCategory === 'all' ? 'border-farm-800 text-farm-800' : 'border-transparent text-slate-500'}`}>🥗 สินค้าทั้งหมด ({products.length})</button>
-                                    <button onClick={() => setSelectedCategory('salad')} className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${selectedCategory === 'salad' ? 'border-farm-800 text-farm-800' : 'border-transparent text-slate-500'}`}>🥬 ผักสลัดอินทรีย์สด (8 ชนิด)</button>
-                                    <button onClick={() => setSelectedCategory('drink')} className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${selectedCategory === 'drink' ? 'border-farm-800 text-farm-800' : 'border-transparent text-slate-500'}`}>🥤 เครื่องดื่มสุขภาพ (1 ชนิด)</button>
+                                    <button 
+                                        onClick={() => setSelectedCategory('all')}
+                                        className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${selectedCategory === 'all' ? 'border-farm-800 text-farm-800' : 'border-transparent text-slate-500'}`}
+                                    >
+                                        🥗 สินค้าทั้งหมด ({products.length})
+                                    </button>
+                                    <button 
+                                        onClick={() => setSelectedCategory('salad')}
+                                        className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${selectedCategory === 'salad' ? 'border-farm-800 text-farm-800' : 'border-transparent text-slate-500'}`}
+                                    >
+                                        🥬 ผักสลัดอินทรีย์สด (8 ชนิด)
+                                    </button>
+                                    <button 
+                                        onClick={() => setSelectedCategory('drink')}
+                                        className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${selectedCategory === 'drink' ? 'border-farm-800 text-farm-800' : 'border-transparent text-slate-500'}`}
+                                    >
+                                        🥤 เครื่องดื่มสุขภาพ (1 ชนิด)
+                                    </button>
                                 </div>
 
                                 {/* Products Grid */}
@@ -1001,9 +1024,13 @@
                                                         <div className="relative h-36 sm:h-44 bg-slate-100 overflow-hidden">
                                                             <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
                                                             <div className="absolute top-2 left-2 flex flex-col gap-1">
-                                                                <span className="bg-slate-900/80 backdrop-blur-md text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full">สต็อก {product.stock} {product.unit}</span>
+                                                                <span className="bg-slate-900/80 backdrop-blur-md text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full">
+                                                                    สต็อก {product.stock} {product.unit}
+                                                                </span>
                                                                 {product.category === 'salad' && isEligibleForWholesalePrice && (
-                                                                    <span className="bg-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow">⭐ ราคาส่ง 100.-</span>
+                                                                    <span className="bg-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow">
+                                                                        ⭐ ราคาส่ง 100.-
+                                                                    </span>
                                                                 )}
                                                             </div>
                                                         </div>
@@ -1031,19 +1058,41 @@
                                                                 </div>
                                                                 {product.category === 'salad' && (
                                                                     <div className="flex gap-1 text-[10px]">
-                                                                        <button onClick={() => updateCartQty(product.id, 1)} className="flex-1 bg-emerald-100 text-emerald-800 font-bold py-1 rounded-lg hover:bg-emerald-200">+0.5 กก.</button>
-                                                                        <button onClick={() => updateCartQty(product.id, 2)} className="flex-1 bg-emerald-600 text-white font-bold py-1 rounded-lg hover:bg-emerald-700">+1.0 กก.</button>
+                                                                        <button onClick={() => updateCartQty(product.id, 1)} className="flex-1 bg-emerald-100 text-emerald-800 font-bold py-1 rounded-lg hover:bg-emerald-200 transition-all">+0.5 กก.</button>
+                                                                        <button onClick={() => updateCartQty(product.id, 2)} className="flex-1 bg-emerald-600 text-white font-bold py-1 rounded-lg hover:bg-emerald-700 transition-all">+1.0 กก.</button>
                                                                     </div>
                                                                 )}
                                                             </div>
                                                         ) : (
                                                             product.category === 'salad' ? (
                                                                 <div className="grid grid-cols-2 gap-1.5">
-                                                                    <button onClick={() => addToCart(product, 0.5)} disabled={product.stock < 0.5} className="py-2.5 bg-farm-800 hover:bg-farm-900 text-white rounded-2xl font-bold text-xs shadow-md disabled:bg-slate-200 disabled:text-slate-400"><span>+ 0.5 กก.</span></button>
-                                                                    <button onClick={() => addToCart(product, 1.0)} disabled={product.stock < 1.0} className="py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-2xl font-bold text-xs shadow-md disabled:bg-slate-200 disabled:text-slate-400"><span>+ 1.0 กก.</span></button>
+                                                                    <button 
+                                                                        onClick={() => addToCart(product, 0.5)}
+                                                                        disabled={product.stock < 0.5}
+                                                                        className="py-2.5 bg-farm-800 hover:bg-farm-900 text-white rounded-2xl font-bold text-xs shadow-md shadow-farm-800/20 transition-all disabled:bg-slate-200 disabled:text-slate-400 flex items-center justify-center gap-0.5"
+                                                                    >
+                                                                        <span>+ 0.5 กก.</span>
+                                                                    </button>
+                                                                    <button 
+                                                                        onClick={() => addToCart(product, 1.0)}
+                                                                        disabled={product.stock < 1.0}
+                                                                        className="py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-2xl font-bold text-xs shadow-md shadow-emerald-700/20 transition-all disabled:bg-slate-200 disabled:text-slate-400 flex items-center justify-center gap-0.5"
+                                                                    >
+                                                                        <span>+ 1.0 กก.</span>
+                                                                    </button>
                                                                 </div>
                                                             ) : (
-                                                                <button onClick={() => addToCart(product, 1)} disabled={product.stock <= 0} className={`w-full py-2.5 rounded-2xl font-bold text-xs transition-all flex items-center justify-center gap-1 ${product.stock > 0 ? 'bg-farm-800 hover:bg-farm-900 text-white shadow-md' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}><span>+ ใส่ตะกร้า (1 ขวด)</span></button>
+                                                                <button 
+                                                                    onClick={() => addToCart(product, 1)}
+                                                                    disabled={product.stock <= 0}
+                                                                    className={`w-full py-2.5 rounded-2xl font-bold text-xs transition-all flex items-center justify-center gap-1 ${
+                                                                        product.stock > 0 
+                                                                        ? 'bg-farm-800 hover:bg-farm-900 text-white shadow-md shadow-farm-800/20' 
+                                                                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                                                    }`}
+                                                                >
+                                                                    <span>+ ใส่ตะกร้า (1 ขวด)</span>
+                                                                </button>
                                                             )
                                                         )}
                                                     </div>
@@ -1054,17 +1103,25 @@
                             </div>
                         )}
 
+                        {}
                         {cart.length > 0 && view === 'store' && (
                             <div className="fixed bottom-16 sm:bottom-6 right-4 left-4 max-w-md mx-auto z-30">
-                                <button onClick={() => setShowCartDrawer(true)} className="w-full bg-slate-900 text-white p-4 rounded-3xl shadow-2xl flex items-center justify-between border border-slate-700 animate-bounce">
+                                <button 
+                                    onClick={() => setShowCartDrawer(true)}
+                                    className="w-full bg-slate-900 text-white p-4 rounded-3xl shadow-2xl flex items-center justify-between border border-slate-700 animate-bounce"
+                                >
                                     <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 bg-farm-500 rounded-2xl flex items-center justify-center font-bold text-lg">🛒</div>
+                                        <div className="w-10 h-10 bg-farm-500 rounded-2xl flex items-center justify-center font-bold text-lg">
+                                            🛒
+                                        </div>
                                         <div className="text-left">
                                             <p className="text-xs text-slate-300 font-medium">{cart.length} รายการในตะกร้า</p>
                                             <p className="font-extrabold text-base">฿{cartTotal}</p>
                                         </div>
                                     </div>
-                                    <span className="bg-farm-500 text-white text-xs font-extrabold px-4 py-2 rounded-xl">ดูตะกร้าสั่งซื้อ ➔</span>
+                                    <span className="bg-farm-500 text-white text-xs font-extrabold px-4 py-2 rounded-xl">
+                                        ดูตะกร้าสั่งซื้อ ➔
+                                    </span>
                                 </button>
                             </div>
                         )}
@@ -1078,6 +1135,7 @@
                                             <button onClick={() => setShowCartDrawer(false)} className="w-8 h-8 bg-slate-100 rounded-full font-bold text-slate-500 hover:bg-slate-200">✕</button>
                                         </div>
 
+                                        {/* Cart items */}
                                         <div className="space-y-3 divide-y divide-slate-100 max-h-48 overflow-y-auto pr-1">
                                             {cart.map(item => (
                                                 <div key={item.id} className="pt-2 flex items-center justify-between text-xs">
@@ -1093,61 +1151,98 @@
                                             ))}
                                         </div>
 
+                                        {/* Checkout Form */}
                                         <form id="checkout-form" onSubmit={handlePlaceOrder} className="space-y-3 pt-2 border-t text-xs">
                                             <h4 className="font-extrabold text-slate-900 text-sm">📋 ข้อมูลสถานที่จัดส่ง</h4>
+                                            
                                             <div>
                                                 <label className="font-bold text-slate-700 block mb-1">ชื่อ-นามสกุล / ชื่อร้านค้า *</label>
-                                                <input type="text" required placeholder="เช่น คุณสมชาย (ร้านสลัด)" value={custName} onChange={e => setCustName(e.target.value)} className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none focus:border-farm-800" />
+                                                <input 
+                                                    type="text" 
+                                                    required 
+                                                    placeholder="เช่น คุณสมชาย (ร้านสลัด)" 
+                                                    value={custName}
+                                                    onChange={e => setCustName(e.target.value)}
+                                                    className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none focus:border-farm-800"
+                                                />
                                             </div>
+
                                             <div>
                                                 <label className="font-bold text-slate-700 block mb-1">เบอร์โทรศัพท์ติดต่อ *</label>
-                                                <input type="tel" required placeholder="0812345678" value={custPhone} onChange={e => setCustPhone(e.target.value)} className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none focus:border-farm-800" />
+                                                <input 
+                                                    type="tel" 
+                                                    required 
+                                                    placeholder="0812345678" 
+                                                    value={custPhone}
+                                                    onChange={e => setCustPhone(e.target.value)}
+                                                    className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none focus:border-farm-800"
+                                                />
                                             </div>
+
                                             <div>
                                                 <label className="font-bold text-slate-700 block mb-1">ที่อยู่สำหรับจัดส่ง *</label>
-                                                <textarea required rows="2" placeholder="บ้านเลขที่ ถนน ซอย จุดสังเกต" value={custAddress} onChange={e => setCustAddress(e.target.value)} className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none focus:border-farm-800"></textarea>
+                                                <textarea 
+                                                    required 
+                                                    rows="2" 
+                                                    placeholder="บ้านเลขที่ ถนน ซอย จุดสังเกต" 
+                                                    value={custAddress}
+                                                    onChange={e => setCustAddress(e.target.value)}
+                                                    className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none focus:border-farm-800"
+                                                ></textarea>
                                             </div>
+
                                             <div>
                                                 <div className="flex justify-between items-center mb-1">
                                                     <label className="font-bold text-slate-700">พิกัด GPS / Google Maps Link</label>
-                                                    <button type="button" onClick={handleGetGpsLocation} className="text-farm-800 font-bold underline text-[11px]">📍 ดึง GPS ปัจจุบัน</button>
+                                                    <button type="button" onClick={handleGetGpsLocation} className="text-farm-800 font-bold underline text-[11px]">
+                                                        📍 ดึง GPS ปัจจุบัน
+                                                    </button>
                                                 </div>
-                                                <input type="url" placeholder="https://maps.google.com/..." value={custMapsUrl} onChange={e => setCustMapsUrl(e.target.value)} className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none text-[11px] focus:border-farm-800" />
+                                                <input 
+                                                    type="url" 
+                                                    placeholder="https://maps.google.com/..." 
+                                                    value={custMapsUrl}
+                                                    onChange={e => setCustMapsUrl(e.target.value)}
+                                                    className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none text-[11px] focus:border-farm-800"
+                                                />
                                             </div>
 
+                                            {}
                                             <div className="pt-2 border-t space-y-3">
                                                 <h4 className="font-extrabold text-slate-900 text-sm">💳 การชำระเงิน</h4>
+                                                
                                                 <div className="flex gap-2">
-                                                    <button type="button" onClick={() => setIsCreditOrder(false)} className={`flex-1 py-2 rounded-xl font-bold border text-xs ${!isCreditOrder ? 'bg-farm-800 text-white border-farm-800' : 'bg-white text-slate-600'}`}>📲 สแกนโอน PromptPay</button>
-                                                    <button type="button" onClick={() => setIsCreditOrder(true)} className={`flex-1 py-2 rounded-xl font-bold border text-xs ${isCreditOrder ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-slate-600'}`}>📝 สั่งซื้อแบบเครดิตร้านค้า</button>
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => setIsCreditOrder(false)}
+                                                        className={`flex-1 py-2 rounded-xl font-bold border text-xs ${!isCreditOrder ? 'bg-farm-800 text-white border-farm-800' : 'bg-white text-slate-600'}`}
+                                                    >
+                                                        📲 สแกนโอน PromptPay
+                                                    </button>
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => setIsCreditOrder(true)}
+                                                        className={`flex-1 py-2 rounded-xl font-bold border text-xs ${isCreditOrder ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-slate-600'}`}
+                                                    >
+                                                        📝 สั่งซื้อแบบเครดิตร้านค้า
+                                                    </button>
                                                 </div>
 
                                                 {!isCreditOrder ? (
-                                                    <div className="bg-slate-50 p-4 rounded-2xl text-center space-y-4 border border-slate-200">
-                                                        <p className="font-extrabold text-slate-900 text-base">📲 สแกนชำระเงินยอด ฿{cartTotal}</p>
-                                                        <div className="bg-white p-3 rounded-2xl inline-block shadow-md border-2 border-emerald-500/20">
+                                                    <div className="bg-slate-50 p-4 rounded-2xl text-center space-y-3 border border-slate-200">
+                                                        <p className="font-extrabold text-slate-900 text-sm">📲 สแกนชำระเงินยอด ฿{cartTotal}</p>
+                                                        <div className="bg-white p-3 rounded-2xl inline-block shadow-md border border-slate-200">
                                                             <img 
                                                                 src={customQrImage || `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=PromptPay-${promptpayNo}-${cartTotal}`} 
                                                                 alt="PromptPay QR" 
-                                                                className="w-56 h-56 sm:w-64 sm:h-64 mx-auto object-contain rounded-lg"
+                                                                className="w-52 h-52 sm:w-60 sm:h-60 mx-auto object-contain rounded-lg"
                                                                 style={{ imageRendering: 'pixelated' }}
                                                             />
                                                         </div>
-
-                                                        {/* High-visibility Bank & PromptPay Details */}
-                                                        <div className="bg-white p-3.5 rounded-2xl border-2 border-emerald-600/30 shadow-sm space-y-2 text-center">
-                                                            <div className="text-xs text-slate-500 font-bold uppercase tracking-wide">📲 รายละเอียดบัญชีสำหรับโอนเงิน</div>
-                                                            <div className="font-mono text-base font-black text-slate-900 flex items-center justify-center gap-1.5 flex-wrap">
-                                                                <span>พร้อมเพย์:</span>
-                                                                <span className="text-farm-800 text-lg bg-emerald-100/80 px-2.5 py-1 rounded-xl border border-emerald-300 font-extrabold tracking-wider">{promptpayNo}</span>
-                                                            </div>
-                                                            {bankAccountNo && (
-                                                                <div className="text-xs sm:text-sm font-extrabold text-slate-800 bg-slate-100 p-2.5 rounded-xl border border-slate-300">
-                                                                    🏦 {bankAccountNo}
-                                                                </div>
-                                                            )}
+                                                        <div className="text-xs text-slate-700 font-mono font-bold bg-amber-50 p-3 rounded-2xl border border-amber-200 text-left space-y-1">
+                                                            <div className="text-sm text-farm-900 font-extrabold">📌 พร้อมเพย์: <span className="font-black text-base">{promptpayNo}</span></div>
+                                                            {bankAccountNo && <div className="text-xs text-slate-800 font-sans font-bold">{bankAccountNo}</div>}
                                                         </div>
-
                                                         <div className="space-y-2 pt-2 border-t">
                                                             <label className="font-bold text-slate-700 block text-xs">📸 แนบรูปสลิปโอนเงิน *</label>
                                                             <input 
@@ -1181,6 +1276,7 @@
                                         </form>
                                     </div>
 
+                                    {/* Submit Button */}
                                     <div className="pt-3 border-t">
                                         <button 
                                             type="submit" 
@@ -1195,6 +1291,7 @@
                             </div>
                         )}
 
+                        {}
                         {view === 'tracking' && (
                             <div className="space-y-4 max-w-3xl mx-auto">
                                 <h2 className="font-extrabold text-slate-900 text-lg">🚚 ติดตามสถานะออเดอร์จัดส่ง</h2>
@@ -1226,8 +1323,8 @@
 
                                                     {order.status === 'pending' && (
                                                         <button 
-                                                            onClick={() => handleAttemptCancel(order)}
-                                                            className="px-2.5 py-1 bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 rounded-lg text-[11px] font-bold transition-all"
+                                                            onClick={() => handleCancelOrder(order)}
+                                                            className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl font-bold text-[11px] transition-all"
                                                         >
                                                             ❌ ยกเลิกออเดอร์
                                                         </button>
@@ -1253,6 +1350,7 @@
                             </div>
                         )}
 
+                        {}
                         {view === 'backoffice' && (
                             <div className="space-y-6">
                                 {!isAdminLoggedIn ? (
@@ -1262,7 +1360,7 @@
                                         </div>
                                         <div>
                                             <h2 className="font-extrabold text-slate-900 text-lg">เข้าสู่ระบบหลังบ้าน</h2>
-                                            <p className="text-slate-500 text-xs">กรอกรหัส PIN 4 หลัก (Admin PIN: 1234 หรือ PIN พนักงาน)</p>
+                                            <p className="text-slate-500 text-xs">กรอกรหัส PIN 4 หลัก (Admin: 1234 หรือ PIN พนักงาน)</p>
                                         </div>
 
                                         <form onSubmit={handleBackofficeLogin} className="space-y-4">
@@ -1282,43 +1380,82 @@
                                     </div>
                                 ) : (
                                     <div className="space-y-5">
-                                        <div className="bg-slate-900 text-white p-4 rounded-3xl flex items-center justify-between">
+                                        {/* Backoffice Header */}
+                                        <div className="bg-slate-900 text-white p-4 rounded-3xl flex flex-wrap items-center justify-between gap-3">
                                             <div>
                                                 <span className="bg-farm-500 text-white text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase">
                                                     {userRole === 'admin' ? '👑 ผู้ดูแลระบบ' : '👷 พนักงาน'}
                                                 </span>
                                                 <h2 className="font-extrabold text-base mt-1">{activeStaffName}</h2>
                                             </div>
-                                            <button 
-                                                onClick={() => { setIsAdminLoggedIn(false); setUserRole(null); }}
-                                                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-bold rounded-xl text-slate-300"
-                                            >
-                                                ออกจากระบบ
-                                            </button>
+                                            <div className="flex items-center gap-2">
+                                                <button 
+                                                    type="button" 
+                                                    onClick={playLoudAlert} 
+                                                    className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-extrabold rounded-xl shadow transition-all"
+                                                >
+                                                    🔊 ทดสอบเสียง
+                                                </button>
+                                                <button 
+                                                    onClick={() => { setIsAdminLoggedIn(false); setUserRole(null); }}
+                                                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-bold rounded-xl text-slate-300"
+                                                >
+                                                    ออกจากระบบ
+                                                </button>
+                                            </div>
                                         </div>
 
+                                        {/* Backoffice Navigation Tabs */}
                                         <div className="flex border-b border-slate-200 gap-2 overflow-x-auto hide-scrollbar">
-                                            <button onClick={() => setAdminTab('active')} className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${adminTab === 'active' ? 'border-farm-800 text-farm-800' : 'border-transparent text-slate-500'}`}>📦 งานวันนี้ ({orders.filter(o => o.status !== 'completed' && o.status !== 'cancelled').length})</button>
-                                            <button onClick={() => setAdminTab('completed')} className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${adminTab === 'completed' ? 'border-farm-800 text-farm-800' : 'border-transparent text-slate-500'}`}>✅ ส่งสำเร็จแล้ว</button>
+                                            <button 
+                                                onClick={() => setAdminTab('active')}
+                                                className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${adminTab === 'active' ? 'border-farm-800 text-farm-800' : 'border-transparent text-slate-500'}`}
+                                            >
+                                                📦 งานวันนี้ ({orders.filter(o => o.status !== 'completed' && o.status !== 'cancelled').length})
+                                            </button>
+                                            <button 
+                                                onClick={() => setAdminTab('completed')}
+                                                className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${adminTab === 'completed' ? 'border-farm-800 text-farm-800' : 'border-transparent text-slate-500'}`}
+                                            >
+                                                ✅ ส่งสำเร็จแล้ว
+                                            </button>
 
                                             {userRole === 'admin' && (
                                                 <>
-                                                    <button onClick={() => setAdminTab('inventory')} className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${adminTab === 'inventory' ? 'border-farm-800 text-farm-800' : 'border-transparent text-slate-500'}`}>🥬 จัดการคลังผัก ({products.length} รายการ)</button>
-                                                    <button onClick={() => setAdminTab('reports')} className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${adminTab === 'reports' ? 'border-farm-800 text-farm-800' : 'border-transparent text-slate-500'}`}>📊 สรุปยอดขาย & ออกบิลเอกสาร</button>
-                                                    <button onClick={() => setAdminTab('settings')} className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${adminTab === 'settings' ? 'border-farm-800 text-farm-800' : 'border-transparent text-slate-500'}`}>⚙️ ตั้งค่าฟาร์ม & ลูกค้าพิเศษ</button>
+                                                    <button 
+                                                        onClick={() => setAdminTab('inventory')}
+                                                        className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${adminTab === 'inventory' ? 'border-farm-800 text-farm-800' : 'border-transparent text-slate-500'}`}
+                                                    >
+                                                        🥬 จัดการคลังผัก ({products.length} รายการ)
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => setAdminTab('reports')}
+                                                        className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${adminTab === 'reports' ? 'border-farm-800 text-farm-800' : 'border-transparent text-slate-500'}`}
+                                                    >
+                                                        📊 สรุปยอดขาย & ออกบิลเอกสาร
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => setAdminTab('settings')}
+                                                        className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${adminTab === 'settings' ? 'border-farm-800 text-farm-800' : 'border-transparent text-slate-500'}`}
+                                                    >
+                                                        ⚙️ ตั้งค่าฟาร์ม & ร้านค้า
+                                                    </button>
                                                 </>
                                             )}
                                         </div>
 
-                                        {/* Inventory Management Tab */}
+                                        {}
                                         {adminTab === 'inventory' && userRole === 'admin' && (
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                                                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-3">
                                                     <div>
                                                         <h3 className="font-extrabold text-slate-900 text-base">🥬 จัดการสต็อกผัก 8 ชนิด + น้ำปั่นเคล 1 รายการ</h3>
-                                                        <p className="text-slate-500 text-xs">ปรับสต็อกผักสลัดครั้งละ 0.5 กิโลกรัม ระบบจะอัปเดตหน้าร้านทันที</p>
+                                                        <p className="text-slate-500 text-xs">ปรับสต็อกผักสลัดครั้งละ 0.5 กิโลกรัม</p>
                                                     </div>
-                                                    <button onClick={handleForceSync9Products} className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center gap-1.5">
+                                                    <button 
+                                                        onClick={handleForceSync9Products}
+                                                        className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center gap-1.5"
+                                                    >
                                                         <span>🔄</span>
                                                         <span>รีเซ็ต/ซิงค์ผักครบ 9 รายการเข้า Firebase</span>
                                                     </button>
@@ -1338,21 +1475,37 @@
                                                             </div>
 
                                                             <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                                                                <button onClick={async () => {
-                                                                    const step = p.category === 'salad' ? 0.5 : 1;
-                                                                    const newStock = Math.max(0, roundStep(p.stock - step));
-                                                                    await db.collection('products').doc(p.id).update({ stock: newStock });
-                                                                }} className="w-8 h-8 bg-slate-100 hover:bg-slate-200 rounded-xl font-extrabold text-slate-700">-</button>
-                                                                <input type="number" step={p.category === 'salad' ? "0.5" : "1"} value={p.stock} onChange={async (e) => {
-                                                                    const val = parseFloat(e.target.value) || 0;
-                                                                    await db.collection('products').doc(p.id).update({ stock: roundStep(val) });
-                                                                }} className="w-20 p-1.5 border rounded-xl text-center font-extrabold bg-slate-50" />
+                                                                <button 
+                                                                    onClick={async () => {
+                                                                        const step = p.category === 'salad' ? 0.5 : 1;
+                                                                        const newStock = Math.max(0, roundStep(p.stock - step));
+                                                                        await db.collection('products').doc(p.id).update({ stock: newStock });
+                                                                    }}
+                                                                    className="w-8 h-8 bg-slate-100 hover:bg-slate-200 rounded-xl font-extrabold text-slate-700"
+                                                                >
+                                                                    -
+                                                                </button>
+                                                                <input 
+                                                                    type="number" 
+                                                                    step={p.category === 'salad' ? "0.5" : "1"}
+                                                                    value={p.stock}
+                                                                    onChange={async (e) => {
+                                                                        const val = parseFloat(e.target.value) || 0;
+                                                                        await db.collection('products').doc(p.id).update({ stock: roundStep(val) });
+                                                                    }}
+                                                                    className="w-20 p-1.5 border rounded-xl text-center font-extrabold bg-slate-50"
+                                                                />
                                                                 <span className="font-bold text-slate-500">{p.unit}</span>
-                                                                <button onClick={async () => {
-                                                                    const step = p.category === 'salad' ? 0.5 : 1;
-                                                                    const newStock = roundStep(p.stock + step);
-                                                                    await db.collection('products').doc(p.id).update({ stock: newStock });
-                                                                }} className="w-8 h-8 bg-farm-800 hover:bg-farm-900 text-white rounded-xl font-extrabold">+</button>
+                                                                <button 
+                                                                    onClick={async () => {
+                                                                        const step = p.category === 'salad' ? 0.5 : 1;
+                                                                        const newStock = roundStep(p.stock + step);
+                                                                        await db.collection('products').doc(p.id).update({ stock: newStock });
+                                                                    }}
+                                                                    className="w-8 h-8 bg-farm-800 hover:bg-farm-900 text-white rounded-xl font-extrabold"
+                                                                >
+                                                                    +
+                                                                </button>
                                                             </div>
                                                         </div>
                                                     ))}
@@ -1360,15 +1513,18 @@
                                             </div>
                                         )}
 
-                                        {/* Sales Reports & Document Issuance Tab */}
+                                        {}
                                         {adminTab === 'reports' && userRole === 'admin' && (
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                                                 <div className="flex justify-between items-center border-b pb-3">
                                                     <div>
-                                                        <h3 className="font-extrabold text-slate-900 text-base">📊 สรุปยอดขาย & ออกบิลเอกสาร A4</h3>
-                                                        <p className="text-slate-500 text-xs">สรุปยอดคำสั่งซื้อทั้งหมด และออกบิลใบเสร็จรับเงิน / ใบส่งสินค้า</p>
+                                                        <h3 className="font-extrabold text-slate-900 text-base">📊 รายงานสรุปยอดขาย & ออกบิลเอกสาร</h3>
+                                                        <p className="text-slate-500 text-xs">สรุปยอดคำสั่งซื้อทั้งหมดที่บันทึกในระบบ</p>
                                                     </div>
-                                                    <button onClick={handleExportCSV} className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs rounded-xl shadow flex items-center gap-1.5">
+                                                    <button 
+                                                        onClick={handleExportCSV}
+                                                        className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs rounded-xl shadow flex items-center gap-1.5"
+                                                    >
                                                         <span>📥</span>
                                                         <span>ดาวน์โหลด CSV</span>
                                                     </button>
@@ -1377,56 +1533,87 @@
                                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                                                     <div className="bg-farm-50 p-4 rounded-2xl border border-farm-200 text-center">
                                                         <p className="text-slate-500 text-xs font-bold">ยอดขายรวมทั้งหมด</p>
-                                                        <p className="text-xl sm:text-2xl font-black text-farm-800 mt-1">฿{orders.reduce((sum, o) => sum + (o.total || 0), 0)}</p>
+                                                        <p className="text-xl sm:text-2xl font-black text-farm-800 mt-1">
+                                                            ฿{orders.reduce((sum, o) => sum + (o.total || 0), 0)}
+                                                        </p>
                                                     </div>
                                                     <div className="bg-blue-50 p-4 rounded-2xl border border-blue-200 text-center">
                                                         <p className="text-slate-500 text-xs font-bold">จำนวนออเดอร์ทั้งหมด</p>
-                                                        <p className="text-xl sm:text-2xl font-black text-blue-800 mt-1">{orders.length} รายการ</p>
+                                                        <p className="text-xl sm:text-2xl font-black text-blue-800 mt-1">
+                                                            {orders.length} รายการ
+                                                        </p>
                                                     </div>
                                                     <div className="bg-amber-50 p-4 rounded-2xl border border-amber-200 text-center col-span-2 sm:col-span-1">
                                                         <p className="text-slate-500 text-xs font-bold">ออเดอร์เครดิตค้างชำระ</p>
-                                                        <p className="text-xl sm:text-2xl font-black text-amber-800 mt-1">{orders.filter(o => o.isCredit && o.status !== 'completed').length} รายการ</p>
+                                                        <p className="text-xl sm:text-2xl font-black text-amber-800 mt-1">
+                                                            {orders.filter(o => o.isCredit && o.status !== 'completed').length} รายการ
+                                                        </p>
                                                     </div>
                                                 </div>
 
-                                                <div className="pt-2 divide-y divide-slate-100 text-xs">
-                                                    <h4 className="font-extrabold text-slate-900 mb-2">📄 รายการออเดอร์เพื่อออกเอกสาร:</h4>
-                                                    {orders.map(o => {
-                                                        const isDeliveryNote = o.isCredit || o.isWholesaleCustomer;
-                                                        return (
-                                                            <div key={o.id} className="py-2.5 flex items-center justify-between gap-2">
+                                                <div className="pt-3 border-t space-y-2">
+                                                    <h4 className="font-extrabold text-slate-900 text-xs">📋 รายการคำสั่งซื้อทั้งหมดในระบบ:</h4>
+                                                    <div className="divide-y divide-slate-100 text-xs">
+                                                        {orders.map(ord => (
+                                                            <div key={ord.id} className="py-2.5 flex items-center justify-between gap-2">
                                                                 <div>
-                                                                    <div className="flex items-center gap-1.5">
-                                                                        <span className="font-mono font-bold text-slate-900">{o.docNo}</span>
-                                                                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${isDeliveryNote ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
-                                                                            {isDeliveryNote ? 'ใบส่งสินค้า' : 'ใบเสร็จรับเงิน'}
-                                                                        </span>
-                                                                    </div>
-                                                                    <p className="text-slate-400 text-[11px]">{o.date} • คุณ {o.customerName} (฿{o.total})</p>
+                                                                    <span className="font-mono font-bold text-slate-900">{ord.docNo}</span>
+                                                                    <span className="text-slate-500 ml-2">คุณ {ord.customerName} ({ord.phone})</span>
                                                                 </div>
-                                                                <button onClick={() => setSelectedOrderDetails(o)} className={`px-3 py-1.5 text-white font-bold rounded-xl text-[11px] shadow ${isDeliveryNote ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-700 hover:bg-emerald-800'}`}>
-                                                                    📄 พิมพ์ {isDeliveryNote ? 'ใบส่งสินค้า' : 'ใบเสร็จ'}
-                                                                </button>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-extrabold text-farm-800">฿{ord.total}</span>
+                                                                    <button 
+                                                                        onClick={() => setSelectedOrderDetails(ord)}
+                                                                        className="px-2.5 py-1 bg-farm-800 text-white font-bold rounded-lg hover:bg-farm-900 transition-all text-[11px]"
+                                                                    >
+                                                                        📄 ออกบิล A4
+                                                                    </button>
+                                                                    {userRole === 'admin' && (
+                                                                        <button 
+                                                                            onClick={() => handleDeleteOrderAdmin(ord)}
+                                                                            className="px-2 py-1 bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 font-bold rounded-lg text-[11px]"
+                                                                        >
+                                                                            🗑️ ลบ
+                                                                        </button>
+                                                                    )}
+                                                                </div>
                                                             </div>
-                                                        );
-                                                    })}
+                                                        ))}
+                                                    </div>
                                                 </div>
                                             </div>
                                         )}
 
+                                        {}
                                         {adminTab === 'settings' && userRole === 'admin' && (
                                             <div className="space-y-6">
-                                                {/* Wholesale Whitelist Management Card */}
+                                                {/* Wholesale Whitelist Card */}
                                                 <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
                                                     <div className="border-b pb-3">
                                                         <h3 className="font-extrabold text-slate-900 text-base">🏪 จัดการรายชื่อลูกค้าราคาพิเศษ / ร้านอาหาร / Shop</h3>
-                                                        <p className="text-slate-500 text-xs">ลงทะเบียนเบอร์โทรศัพท์ร้านค้าประจำ เพื่อรับสิทธิ์สั่งซื้อราคาส่ง (100.-/กก.) และสั่งซื้อแบบเครดิตร้านค้า</p>
+                                                        <p className="text-slate-500 text-xs">ลงทะเบียนเบอร์โทรศัพท์ร้านค้าประจำ เพื่อรับสิทธิ์สั่งซื้อราคาส่ง (100.-/กก.) และสิทธิ์สั่งซื้อแบบเครดิตร้านค้า</p>
                                                     </div>
 
                                                     <form onSubmit={handleAddWholesaleCustomer} className="flex flex-col sm:flex-row items-center gap-2 bg-emerald-50/60 p-3 rounded-2xl border border-emerald-100 text-xs">
-                                                        <input type="text" placeholder="ชื่อร้านค้า / ลูกค้าประจำ (เช่น ร้านสลัดคุณน้อง)" required value={newWholesaleName} onChange={e => setNewWholesaleName(e.target.value)} className="w-full sm:flex-1 p-2.5 border rounded-xl bg-white outline-none focus:border-farm-800" />
-                                                        <input type="tel" placeholder="เบอร์โทรศัพท์ (เช่น 0812345678)" required value={newWholesalePhone} onChange={e => setNewWholesalePhone(e.target.value)} className="w-full sm:w-40 p-2.5 border rounded-xl bg-white text-center font-mono font-bold outline-none focus:border-farm-800" />
-                                                        <button type="submit" className="w-full sm:w-auto px-4 py-2.5 bg-farm-800 hover:bg-farm-900 text-white font-extrabold rounded-xl shadow whitespace-nowrap">+ ลงทะเบียนร้านค้า</button>
+                                                        <input 
+                                                            type="text" 
+                                                            placeholder="ชื่อร้านค้า / ลูกค้าประจำ (เช่น ร้านสลัดคุณน้อง)" 
+                                                            required
+                                                            value={newWholesaleName}
+                                                            onChange={e => setNewWholesaleName(e.target.value)}
+                                                            className="w-full sm:flex-1 p-2.5 border rounded-xl bg-white outline-none focus:border-farm-800"
+                                                        />
+                                                        <input 
+                                                            type="tel" 
+                                                            placeholder="เบอร์โทรศัพท์ (เช่น 0812345678)" 
+                                                            required
+                                                            value={newWholesalePhone}
+                                                            onChange={e => setNewWholesalePhone(e.target.value)}
+                                                            className="w-full sm:w-40 p-2.5 border rounded-xl bg-white text-center font-mono font-bold outline-none focus:border-farm-800"
+                                                        />
+                                                        <button type="submit" className="w-full sm:w-auto px-4 py-2.5 bg-farm-800 hover:bg-farm-900 text-white font-extrabold rounded-xl shadow whitespace-nowrap transition-all">
+                                                            + ลงทะเบียนร้านค้า
+                                                        </button>
                                                     </form>
 
                                                     <div className="divide-y divide-slate-100 text-xs">
@@ -1434,16 +1621,28 @@
                                                             <div className="py-4 text-center text-slate-400">ยังไม่มีรายชื่อร้านค้าในระบบ</div>
                                                         ) : (
                                                             wholesaleWhitelist.map((shop, idx) => (
-                                                                <div key={shop.id || idx} className="py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                                                                <div key={shop.id || idx} className="py-3 flex items-center justify-between gap-2">
                                                                     {editingWholesaleId === shop.id ? (
-                                                                        <form onSubmit={handleSaveEditWholesale} className="flex flex-col sm:flex-row items-center gap-2 w-full">
-                                                                            <input type="text" required value={editWholesaleName} onChange={e => setEditWholesaleName(e.target.value)} className="w-full sm:flex-1 p-2 border rounded-xl" />
-                                                                            <input type="tel" required value={editWholesalePhone} onChange={e => setEditWholesalePhone(e.target.value)} className="w-full sm:w-36 p-2 border rounded-xl font-mono text-center" />
-                                                                            <div className="flex gap-1 w-full sm:w-auto">
-                                                                                <button type="submit" className="px-3 py-1.5 bg-emerald-600 text-white font-bold rounded-xl text-xs">💾 บันทึก</button>
-                                                                                <button type="button" onClick={() => setEditingWholesaleId(null)} className="px-3 py-1.5 bg-slate-200 text-slate-700 font-bold rounded-xl text-xs">ยกเลิก</button>
-                                                                            </div>
-                                                                        </form>
+                                                                        <div className="flex flex-1 items-center gap-2">
+                                                                            <input 
+                                                                                type="text" 
+                                                                                value={editWholesaleName} 
+                                                                                onChange={e => setEditWholesaleName(e.target.value)} 
+                                                                                className="p-2 border rounded-xl flex-1 text-xs" 
+                                                                            />
+                                                                            <input 
+                                                                                type="tel" 
+                                                                                value={editWholesalePhone} 
+                                                                                onChange={e => setEditWholesalePhone(e.target.value)} 
+                                                                                className="p-2 border rounded-xl w-32 font-mono text-xs" 
+                                                                            />
+                                                                            <button onClick={() => handleSaveEditWholesale(shop.id)} className="px-3 py-1.5 bg-emerald-600 text-white font-bold rounded-xl text-[11px]">
+                                                                                บันทึก
+                                                                            </button>
+                                                                            <button onClick={() => setEditingWholesaleId(null)} className="px-2 py-1.5 bg-slate-200 text-slate-600 rounded-xl text-[11px]">
+                                                                                ยกเลิก
+                                                                            </button>
+                                                                        </div>
                                                                     ) : (
                                                                         <>
                                                                             <div className="flex items-center gap-2">
@@ -1453,9 +1652,21 @@
                                                                                     <p className="text-slate-400 font-mono text-[11px]">📞 {shop.phone}</p>
                                                                                 </div>
                                                                             </div>
-                                                                            <div className="flex items-center gap-2">
-                                                                                <button type="button" onClick={() => handleStartEditWholesale(shop)} className="text-blue-600 font-bold hover:underline px-2 py-1 rounded-lg hover:bg-blue-50 text-[11px]">✏️ แก้ไข</button>
-                                                                                <button type="button" onClick={() => handleDeleteWholesaleCustomer(shop.id)} className="text-rose-500 font-bold hover:underline px-2 py-1 rounded-lg hover:bg-rose-50 text-[11px]">🗑️ ลบ</button>
+                                                                            <div className="flex items-center gap-1">
+                                                                                <button 
+                                                                                    type="button" 
+                                                                                    onClick={() => handleStartEditWholesale(shop)} 
+                                                                                    className="text-amber-600 font-bold hover:underline px-2 py-1 rounded-lg hover:bg-amber-50 text-[11px]"
+                                                                                >
+                                                                                    ✏️ แก้ไข
+                                                                                </button>
+                                                                                <button 
+                                                                                    type="button"
+                                                                                    onClick={() => handleDeleteWholesaleCustomer(shop.id)} 
+                                                                                    className="text-rose-500 font-bold hover:underline px-2 py-1 rounded-lg hover:bg-rose-50 transition-all text-[11px]"
+                                                                                >
+                                                                                    ลบรายชื่อ
+                                                                                </button>
                                                                             </div>
                                                                         </>
                                                                     )}
@@ -1474,54 +1685,86 @@
                                                     <form onSubmit={handleSaveFarmSettings} className="space-y-3 text-xs">
                                                         <div>
                                                             <label className="font-bold text-slate-700 block mb-1">ชื่อฟาร์ม / ร้านค้า</label>
-                                                            <input type="text" value={farmName} onChange={e => setFarmName(e.target.value)} className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none focus:border-farm-800" />
+                                                            <input 
+                                                                type="text" 
+                                                                value={farmName}
+                                                                onChange={e => setFarmName(e.target.value)}
+                                                                className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none focus:border-farm-800"
+                                                            />
                                                         </div>
 
                                                         <div>
                                                             <label className="font-bold text-slate-700 block mb-1">เลขประจำตัวผู้เสียภาษี (Tax ID)</label>
-                                                            <input type="text" value={taxId} onChange={e => setTaxId(e.target.value)} className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none font-mono focus:border-farm-800" />
+                                                            <input 
+                                                                type="text" 
+                                                                value={taxId}
+                                                                onChange={e => setTaxId(e.target.value)}
+                                                                className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none font-mono focus:border-farm-800"
+                                                            />
                                                         </div>
 
                                                         <div>
                                                             <label className="font-bold text-slate-700 block mb-1">ที่อยู่ฟาร์ม</label>
-                                                            <textarea rows="2" value={farmAddress} onChange={e => setFarmAddress(e.target.value)} className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none focus:border-farm-800"></textarea>
+                                                            <textarea 
+                                                                rows="2"
+                                                                value={farmAddress}
+                                                                onChange={e => setFarmAddress(e.target.value)}
+                                                                className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none focus:border-farm-800"
+                                                            ></textarea>
                                                         </div>
 
                                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                                             <div>
                                                                 <label className="font-bold text-slate-700 block mb-1">เบอร์โทรศัพท์ฟาร์ม</label>
-                                                                <input type="text" value={farmPhone} onChange={e => setFarmPhone(e.target.value)} className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none focus:border-farm-800" />
+                                                                <input 
+                                                                    type="text" 
+                                                                    value={farmPhone}
+                                                                    onChange={e => setFarmPhone(e.target.value)}
+                                                                    className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none focus:border-farm-800"
+                                                                />
                                                             </div>
                                                             <div>
                                                                 <label className="font-bold text-slate-700 block mb-1">เบอร์ PromptPay</label>
-                                                                <input type="text" value={promptpayNo} onChange={e => setPromptpayNo(e.target.value)} className="w-full p-2.5 border rounded-xl bg-slate-50 font-mono outline-none focus:border-farm-800" />
+                                                                <input 
+                                                                    type="text" 
+                                                                    value={promptpayNo}
+                                                                    onChange={e => setPromptpayNo(e.target.value)}
+                                                                    className="w-full p-2.5 border rounded-xl bg-slate-50 font-mono outline-none focus:border-farm-800"
+                                                                />
                                                             </div>
                                                         </div>
 
                                                         <div>
                                                             <label className="font-bold text-slate-700 block mb-1">รายละเอียดบัญชีธนาคาร</label>
-                                                            <input type="text" value={bankAccountNo} onChange={e => setBankAccountNo(e.target.value)} className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none focus:border-farm-800" />
+                                                            <input 
+                                                                type="text" 
+                                                                value={bankAccountNo}
+                                                                onChange={e => setBankAccountNo(e.target.value)}
+                                                                className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none focus:border-farm-800"
+                                                            />
                                                         </div>
 
                                                         <div>
-                                                            <label className="font-bold text-slate-700 block mb-1">📸 อัปโหลดรูป QR Code พร้อมเพย์หน้าร้านค้า (ภาพต้นฉบับ คมชัด ไม่บีบอัด)</label>
-                                                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 bg-slate-50 p-3 rounded-2xl border">
+                                                            <label className="font-bold text-slate-700 block mb-1">📸 รูปภาพ QR Code พร้อมเพย์หน้าร้านค้า (คมชัด ไร้การบีบอัด)</label>
+                                                            <div className="flex items-center gap-3 bg-slate-50 p-2.5 rounded-xl border">
                                                                 {customQrImage ? (
-                                                                    <div className="flex items-center gap-3">
-                                                                        <img src={customQrImage} alt="QR Code Preview" className="w-20 h-20 object-contain rounded-xl border bg-white p-1 shadow-sm" />
+                                                                    <div className="relative">
+                                                                        <img src={customQrImage} alt="QR Code Preview" className="w-16 h-16 object-contain rounded-lg border bg-white p-1" />
                                                                         <button 
                                                                             type="button" 
-                                                                            onClick={() => { setCustomQrImage(''); setCustomQrFile(null); }} 
-                                                                            className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 hover:bg-rose-100 px-3 py-1.5 rounded-xl transition-all shadow-sm flex items-center gap-1"
+                                                                            onClick={handleClearCustomQr}
+                                                                            className="mt-1 text-[10px] text-rose-600 font-bold block hover:underline"
                                                                         >
-                                                                            🗑️ ลบรูป QR Code (ใช้ QR รวม)
+                                                                            🗑️ ลบรูป QR Code
                                                                         </button>
                                                                     </div>
                                                                 ) : (
-                                                                    <div className="w-20 h-20 bg-slate-200 rounded-xl flex items-center justify-center text-slate-400 text-xs font-bold">ไม่มีรูป</div>
+                                                                    <div className="w-16 h-16 bg-slate-200 rounded-lg flex items-center justify-center text-slate-400 text-xs font-bold">ไม่มีรูป</div>
                                                                 )}
-                                                                <div className="flex-1 space-y-1 w-full">
-                                                                    <input type="file" accept="image/*" onChange={(e) => {
+                                                                <input 
+                                                                    type="file" 
+                                                                    accept="image/*"
+                                                                    onChange={(e) => {
                                                                         const file = e.target.files[0];
                                                                         if (file) {
                                                                             setCustomQrFile(file);
@@ -1529,136 +1772,111 @@
                                                                             reader.onload = (ev) => setCustomQrImage(ev.target.result);
                                                                             reader.readAsDataURL(file);
                                                                         }
-                                                                    }} className="w-full text-xs text-slate-500" />
-                                                                    <p className="text-[10px] text-slate-400">* ระบบจะบันทึกไฟล์ภาพต้นฉบับแบบไม่บีบอัด เพื่อให้สแกนจ่ายได้ง่าย 100%</p>
-                                                                </div>
+                                                                    }}
+                                                                    className="w-full text-xs text-slate-500"
+                                                                />
                                                             </div>
                                                         </div>
 
-                                                        <button type="submit" disabled={isSavingSettings} className="w-full py-2.5 bg-farm-800 hover:bg-farm-900 text-white font-extrabold rounded-xl shadow flex items-center justify-center gap-2">
+                                                        <button 
+                                                            type="submit" 
+                                                            disabled={isSavingSettings}
+                                                            className="w-full py-2.5 bg-farm-800 hover:bg-farm-900 text-white font-extrabold rounded-xl shadow flex items-center justify-center gap-2"
+                                                        >
                                                             {isSavingSettings ? '⏳ กำลังบันทึก...' : '💾 บันทึกข้อมูลฟาร์มขึ้น Firebase'}
                                                         </button>
                                                     </form>
                                                 </div>
-
-                                                <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
-                                                    <div className="border-b pb-3">
-                                                        <h3 className="font-extrabold text-slate-900 text-base">👥 จัดการสิทธิ์และรหัส PIN พนักงาน</h3>
-                                                    </div>
-                                                    <div className="bg-amber-50 p-3 rounded-2xl border border-amber-200 space-y-1 text-xs mb-3">
-                                                        <label className="font-bold text-amber-900">🔒 เปลี่ยนรหัส PIN ผู้ดูแลระบบ (Admin Master PIN):</label>
-                                                        <input type="password" maxLength="4" value={masterAdminPin} onChange={e => setMasterAdminPin(e.target.value)} className="w-32 p-2 border border-amber-300 rounded-xl font-mono text-center font-bold text-sm ml-2 bg-white" />
-                                                    </div>
-                                                    {staffList.length < 5 && (
-                                                        <form onSubmit={e => {
-                                                            e.preventDefault();
-                                                            if (!newStaffName || !newStaffPin) return;
-                                                            if (newStaffPin.length !== 4) { showToast('⚠️ แจ้งเตือน', 'รหัส PIN พนักงานต้องมี 4 หลัก', 'error'); return; }
-                                                            const updated = [...staffList, { id: Date.now(), name: newStaffName, pin: newStaffPin }];
-                                                            setStaffList(updated);
-                                                            db.collection('settings').doc('farm_config').set({ staffList: updated }, { merge: true });
-                                                            setNewStaffName('');
-                                                            setNewStaffPin('');
-                                                            showToast('✅ เพิ่มพนักงานสำเร็จ', `เพิ่มพนักงานคุณ ${newStaffName} เรียบร้อยแล้ว`, 'success');
-                                                        }} className="flex flex-col sm:flex-row items-center gap-2 bg-slate-50 p-3 rounded-2xl text-xs">
-                                                            <input type="text" placeholder="ชื่อพนักงาน" required value={newStaffName} onChange={e => setNewStaffName(e.target.value)} className="w-full sm:flex-1 p-2 border rounded-xl" />
-                                                            <input type="password" maxLength="4" placeholder="PIN 4 หลัก" required value={newStaffPin} onChange={e => setNewStaffPin(e.target.value)} className="w-full sm:w-28 p-2 border rounded-xl text-center font-mono font-bold" />
-                                                            <button type="submit" className="w-full sm:w-auto px-4 py-2 bg-farm-800 text-white font-bold rounded-xl shadow whitespace-nowrap">+ เพิ่มพนักงาน</button>
-                                                        </form>
-                                                    )}
-                                                    <div className="divide-y divide-slate-100 text-xs">
-                                                        {staffList.map((staff, idx) => (
-                                                            <div key={staff.id} className="py-2.5 flex items-center justify-between">
-                                                                <div>
-                                                                    <span className="font-bold text-slate-900">{idx + 1}. {staff.name}</span>
-                                                                    <span className="text-slate-400 font-mono ml-2">(PIN: {staff.pin})</span>
-                                                                </div>
-                                                                <button onClick={() => {
-                                                                    const updated = staffList.filter(s => s.id !== staff.id);
-                                                                    setStaffList(updated);
-                                                                    db.collection('settings').doc('farm_config').set({ staffList: updated }, { merge: true });
-                                                                    showToast('🗑️ ลบพนักงาน', 'ลบข้อมูลพนักงานเรียบร้อยแล้ว', 'info');
-                                                                }} className="text-rose-500 font-bold hover:underline">ลบ</button>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
                                             </div>
                                         )}
 
+                                        {}
                                         {(adminTab === 'active' || adminTab === 'completed') && (
                                             <div className="space-y-4">
-                                                {orders.filter(o => adminTab === 'completed' ? o.status === 'completed' : (o.status !== 'completed' && o.status !== 'cancelled')).map(order => {
-                                                    const isDeliveryNote = order.isCredit || order.isWholesaleCustomer;
-                                                    return (
-                                                        <div key={order.id} className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3">
-                                                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b pb-3">
-                                                                <div>
-                                                                    <div className="flex items-center gap-2">
-                                                                        <span className="font-extrabold text-slate-900 text-sm">{order.docNo}</span>
-                                                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${order.isCredit ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
-                                                                            {order.isCredit ? 'เครดิต' : 'จ่ายสด/โอน'}
-                                                                        </span>
-                                                                    </div>
-                                                                    <p className="text-slate-400 text-[11px]">{order.date} • คุณ {order.customerName} ({order.phone})</p>
+                                                {orders.filter(o => adminTab === 'completed' ? o.status === 'completed' : (o.status !== 'completed' && o.status !== 'cancelled')).map(order => (
+                                                    <div key={order.id} className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3">
+                                                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b pb-3">
+                                                            <div>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-extrabold text-slate-900 text-sm">{order.docNo}</span>
+                                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${order.isCredit ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                                                                        {order.isCredit ? 'เครดิต' : 'จ่ายสด/โอน'}
+                                                                    </span>
                                                                 </div>
+                                                                <p className="text-slate-400 text-[11px]">{order.date} • คุณ {order.customerName} ({order.phone})</p>
+                                                            </div>
 
-                                                                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                                                                    <select value={order.status} onChange={e => updateOrderStatus(order.id, e.target.value)} className="text-xs p-2 border border-slate-300 rounded-xl font-bold bg-slate-50 outline-none">
-                                                                        <option value="pending">⏳ ได้รับออเดอร์</option>
-                                                                        <option value="packing">🥬 กำลังแพ็คผักสด</option>
-                                                                        <option value="shipping">🚚 กำลังจัดส่ง</option>
-                                                                        <option value="completed">✅ ส่งสำเร็จแล้ว</option>
-                                                                    </select>
+                                                            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                                                                <select 
+                                                                    value={order.status} 
+                                                                    onChange={e => updateOrderStatus(order.id, e.target.value)}
+                                                                    className="text-xs p-2 border border-slate-300 rounded-xl font-bold bg-slate-50 outline-none"
+                                                                >
+                                                                    <option value="pending">⏳ ได้รับออเดอร์</option>
+                                                                    <option value="packing">🥬 กำลังแพ็คผักสด</option>
+                                                                    <option value="shipping">🚚 กำลังจัดส่ง</option>
+                                                                    <option value="completed">✅ ส่งสำเร็จแล้ว</option>
+                                                                </select>
 
-                                                                    <button onClick={() => setSelectedOrderDetails(order)} className={`px-3.5 py-2 text-white text-xs font-black rounded-xl shadow flex items-center gap-1.5 ${isDeliveryNote ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-700 hover:bg-emerald-800'}`}>
-                                                                        <span>📄</span>
-                                                                        <span>{isDeliveryNote ? 'ออกใบส่งของ (A4)' : 'ออกใบเสร็จรับเงิน (A4)'}</span>
+                                                                <button 
+                                                                    onClick={() => setSelectedOrderDetails(order)} 
+                                                                    className="px-3 py-2 bg-farm-800 hover:bg-farm-900 text-white text-xs font-bold rounded-xl shadow whitespace-nowrap"
+                                                                >
+                                                                    📄 พิมพ์บิล A4
+                                                                </button>
+
+                                                                {userRole === 'admin' && (
+                                                                    <button 
+                                                                        onClick={() => handleDeleteOrderAdmin(order)}
+                                                                        className="px-2.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold rounded-xl whitespace-nowrap transition-all"
+                                                                    >
+                                                                        🗑️ ลบ
                                                                     </button>
-
-                                                                    {userRole === 'admin' && (
-                                                                        <button onClick={() => setDeleteModalOrder(order)} className="px-3 py-2 bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 font-extrabold text-xs rounded-xl transition-all whitespace-nowrap">
-                                                                            🗑️ ลบออเดอร์
-                                                                        </button>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-
-                                                            <div className="text-xs space-y-1">
-                                                                {order.items && order.items.map((it, idx) => (
-                                                                    <div key={idx} className="flex justify-between text-slate-600">
-                                                                        <span>• {it.name} x {it.qty} {it.unit}</span>
-                                                                        <span>฿{it.price * it.qty}</span>
-                                                                    </div>
-                                                                ))}
-                                                                <div className="flex justify-between font-extrabold text-slate-900 pt-1 border-t">
-                                                                    <span>ยอดเงินรวม</span>
-                                                                    <span className="text-farm-800">฿{order.total}</span>
-                                                                </div>
-                                                            </div>
-
-                                                            {order.address && (
-                                                                <p className="text-[11px] text-slate-500 bg-slate-50 p-2 rounded-xl">
-                                                                    📍 <strong>ที่อยู่ส่ง:</strong> {order.address} {order.mapsUrl && <a href={order.mapsUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline ml-1">เปิดแผนที่</a>}
-                                                                </p>
-                                                            )}
-
-                                                            <div className="pt-2 border-t flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
-                                                                <div className="w-full sm:w-auto">
-                                                                    <label className="font-bold text-slate-700 block mb-0.5">📸 อัปโหลดรูปหลักฐานการจัดส่ง:</label>
-                                                                    <input type="file" accept="image/*" onChange={e => {
-                                                                        if (e.target.files && e.target.files[0]) {
-                                                                            handleUploadProofImage(order.id, e.target.files[0]);
-                                                                        }
-                                                                    }} className="text-[10px] text-slate-500" />
-                                                                </div>
-                                                                {order.slipImage && (
-                                                                    <a href={order.slipImage} target="_blank" rel="noreferrer" className="text-blue-600 font-bold hover:underline text-[11px]">🖼️ ดูสลิปโอนเงินลูกค้า</a>
                                                                 )}
                                                             </div>
                                                         </div>
-                                                    );
-                                                })}
+
+                                                        <div className="text-xs space-y-1">
+                                                            {order.items && order.items.map((it, idx) => (
+                                                                <div key={idx} className="flex justify-between text-slate-600">
+                                                                    <span>• {it.name} x {it.qty} {it.unit}</span>
+                                                                    <span>฿{it.price * it.qty}</span>
+                                                                </div>
+                                                            ))}
+                                                            <div className="flex justify-between font-extrabold text-slate-900 pt-1 border-t">
+                                                                <span>ยอดเงินรวม</span>
+                                                                <span className="text-farm-800">฿{order.total}</span>
+                                                            </div>
+                                                        </div>
+
+                                                        {order.address && (
+                                                            <p className="text-[11px] text-slate-500 bg-slate-50 p-2 rounded-xl">
+                                                                📍 <strong>ที่อยู่ส่ง:</strong> {order.address} {order.mapsUrl && <a href={order.mapsUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline ml-1">เปิดแผนที่</a>}
+                                                            </p>
+                                                        )}
+
+                                                        <div className="pt-2 border-t flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
+                                                            <div className="w-full sm:w-auto">
+                                                                <label className="font-bold text-slate-700 block mb-0.5">📸 อัปโหลดรูปหลักฐานการจัดส่ง:</label>
+                                                                <input 
+                                                                    type="file" 
+                                                                    accept="image/*" 
+                                                                    onChange={e => {
+                                                                        if (e.target.files && e.target.files[0]) {
+                                                                            handleUploadProofImage(order.id, e.target.files[0]);
+                                                                        }
+                                                                    }}
+                                                                    className="text-[10px] text-slate-500"
+                                                                />
+                                                            </div>
+                                                            {order.slipImage && (
+                                                                <a href={order.slipImage} target="_blank" rel="noreferrer" className="text-blue-600 font-bold hover:underline text-[11px]">
+                                                                    🖼️ ดูสลิปโอนเงินลูกค้า
+                                                                </a>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))}
                                             </div>
                                         )}
                                     </div>
@@ -1667,21 +1885,23 @@
                         )}
                     </main>
 
+                    {}
                     {selectedOrderDetails && (
                         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
                             <div className="bg-white w-full max-w-3xl rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl my-auto">
                                 <div className="flex justify-between items-center no-print border-b pb-3">
-                                    <h3 className="font-extrabold text-slate-900 text-base">
-                                        📄 ตัวอย่างเอกสาร A4 ({(selectedOrderDetails.isCredit || selectedOrderDetails.isWholesaleCustomer) ? 'ใบส่งสินค้า / ใบแจ้งหนี้' : 'ใบเสร็จรับเงิน'})
-                                    </h3>
+                                    <h3 className="font-extrabold text-slate-900 text-base">📄 ตัวอย่างเอกสาร A4</h3>
                                     <div className="flex gap-2">
-                                        <button onClick={() => window.print()} className="px-4 py-2 bg-farm-800 text-white font-bold text-xs rounded-xl shadow">🖨️ พิมพ์ / บันทึก PDF</button>
-                                        <button onClick={() => setSelectedOrderDetails(null)} className="px-3 py-2 bg-slate-200 text-slate-700 font-bold text-xs rounded-xl hover:bg-slate-300">ปิด</button>
+                                        <button onClick={() => window.print()} className="px-4 py-2 bg-farm-800 text-white font-bold text-xs rounded-xl shadow">
+                                            🖨️ พิมพ์ / บันทึก PDF
+                                        </button>
+                                        <button onClick={() => setSelectedOrderDetails(null)} className="px-3 py-2 bg-slate-200 text-slate-700 font-bold text-xs rounded-xl hover:bg-slate-300">
+                                            ปิด
+                                        </button>
                                     </div>
                                 </div>
 
                                 <div id="printable-area" className="space-y-6 text-slate-800 text-xs">
-                                    {/* Company Header */}
                                     <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4">
                                         <div>
                                             <h1 className="text-xl font-extrabold text-slate-900">{farmName}</h1>
@@ -1690,21 +1910,19 @@
                                         </div>
                                         <div className="text-right">
                                             <h2 className="text-lg font-black text-slate-900">
-                                                {(selectedOrderDetails.isCredit || selectedOrderDetails.isWholesaleCustomer) ? 'ใบส่งสินค้า / ใบแจ้งหนี้' : 'ใบเสร็จรับเงิน'}
+                                                {selectedOrderDetails.isCredit ? 'ใบส่งสินค้า / ใบแจ้งหนี้' : 'ใบเสร็จรับเงิน'}
                                             </h2>
-                                            <p className="font-mono font-bold mt-1 text-slate-600">เลขที่: {selectedOrderDetails.docNo}</p>
+                                            <p className="font-mono font-bold mt-1 text-slate-600">{selectedOrderDetails.docNo}</p>
                                             <p className="text-[11px] text-slate-500">วันที่: {selectedOrderDetails.date}</p>
                                         </div>
                                     </div>
 
-                                    {/* Customer Header */}
                                     <div className="bg-slate-50 p-3 rounded-xl space-y-1">
                                         <p><strong>ชื่อลูกค้า / ร้านค้า:</strong> คุณ {selectedOrderDetails.customerName}</p>
                                         <p><strong>เบอร์โทรศัพท์:</strong> {selectedOrderDetails.phone}</p>
                                         <p><strong>ที่อยู่จัดส่ง:</strong> {selectedOrderDetails.address}</p>
                                     </div>
 
-                                    {/* Items Table */}
                                     <table className="w-full text-left border-collapse">
                                         <thead>
                                             <tr className="border-b-2 border-slate-300 bg-slate-100">
@@ -1734,21 +1952,34 @@
                                         </tfoot>
                                     </table>
 
-                                    <div className="bg-slate-100 p-2.5 rounded-xl text-center font-bold">({bahtText(selectedOrderDetails.total)})</div>
+                                    <div className="bg-slate-100 p-2.5 rounded-xl text-center font-bold">
+                                        ({bahtText(selectedOrderDetails.total)})
+                                    </div>
 
-                                    {/* Signature Section */}
                                     <div className="grid grid-cols-3 gap-4 pt-10 text-center">
                                         <div className="space-y-6">
                                             <div className="border-b border-dashed border-slate-400 w-4/5 mx-auto"></div>
-                                            <p className="text-[11px] font-bold">{(selectedOrderDetails.isCredit || selectedOrderDetails.isWholesaleCustomer) ? 'ผู้รับสินค้า / ลูกค้า' : 'ผู้จ่ายเงิน / ลูกค้า'}<br/><span className="text-[10px] text-slate-400 font-normal">วันที่ ...../...../..........</span></p>
+                                            <p className="text-[11px] font-bold">
+                                                {selectedOrderDetails.isCredit ? 'ผู้รับสินค้า / ลูกค้า' : 'ผู้จ่ายเงิน / ลูกค้า'}
+                                                <br/>
+                                                <span className="text-[10px] text-slate-400 font-normal">วันที่ ...../...../..........</span>
+                                            </p>
                                         </div>
                                         <div className="space-y-6">
                                             <div className="border-b border-dashed border-slate-400 w-4/5 mx-auto"></div>
-                                            <p className="text-[11px] font-bold">พนักงานจัดส่งสินค้า<br/><span className="text-[10px] text-slate-400 font-normal">วันที่ ...../...../..........</span></p>
+                                            <p className="text-[11px] font-bold">
+                                                พนักงานจัดส่งสินค้า
+                                                <br/>
+                                                <span className="text-[10px] text-slate-400 font-normal">วันที่ ...../...../..........</span>
+                                            </p>
                                         </div>
                                         <div className="space-y-6">
                                             <div className="border-b border-dashed border-slate-400 w-4/5 mx-auto"></div>
-                                            <p className="text-[11px] font-bold">{(selectedOrderDetails.isCredit || selectedOrderDetails.isWholesaleCustomer) ? 'ผู้ส่งสินค้า / เกื้อบุญฟาร์ม' : 'ผู้รับเงิน / เกื้อบุญฟาร์ม'}<br/><span className="text-[10px] text-slate-400 font-normal">วันที่ ...../...../..........</span></p>
+                                            <p className="text-[11px] font-bold">
+                                                {selectedOrderDetails.isCredit ? 'ผู้ส่งสินค้า / เกื้อบุญฟาร์ม' : 'ผู้รับเงิน / เกื้อบุญฟาร์ม'}
+                                                <br/>
+                                                <span className="text-[10px] text-slate-400 font-normal">วันที่ ...../...../..........</span>
+                                            </p>
                                         </div>
                                     </div>
                                 </div>
@@ -1756,18 +1987,18 @@
                         </div>
                     )}
 
-                    {/* Mobile Navigation */}
+                    {}
                     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 md:hidden z-20">
                         <div className="grid grid-cols-3 text-center py-2 text-[11px] font-bold">
-                            <button onClick={() => setView('store')} className={`space-y-0.5 ${view === 'store' ? 'text-farm-800' : 'text-slate-400'}`}>
+                            <button onClick={() => setView('store')} className={`space-y-0.5 ${view === 'store' ? 'text-farm-800 font-extrabold' : 'text-slate-400'}`}>
                                 <div className="text-base">🥬</div>
                                 <span>สั่งผักสด</span>
                             </button>
-                            <button onClick={() => setView('tracking')} className={`space-y-0.5 ${view === 'tracking' ? 'text-farm-800' : 'text-slate-400'}`}>
+                            <button onClick={() => setView('tracking')} className={`space-y-0.5 ${view === 'tracking' ? 'text-farm-800 font-extrabold' : 'text-slate-400'}`}>
                                 <div className="text-base">🚚</div>
                                 <span>ติดตาม</span>
                             </button>
-                            <button onClick={() => setView('backoffice')} className={`space-y-0.5 ${view === 'backoffice' ? 'text-farm-800' : 'text-slate-400'}`}>
+                            <button onClick={() => setView('backoffice')} className={`space-y-0.5 ${view === 'backoffice' ? 'text-farm-800 font-extrabold' : 'text-slate-400'}`}>
                                 <div className="text-base">👤🔧</div>
                                 <span>ปฏิบัติการ</span>
                             </button>
