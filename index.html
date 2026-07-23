@@ -1,4 +1,4 @@
-
+<!DOCTYPE html>
 <html lang="th">
 <head>
     <meta charset="UTF-8">
@@ -85,28 +85,41 @@
         const db = firebase.firestore();
         const storage = firebase.storage();
 
-        // Audio Alert Helper using Web Audio API
+        // Audio Context instance with auto-unlock on first user interaction for staff devices
+        let globalAudioCtx = null;
+        const getAudioContext = () => {
+            if (!globalAudioCtx) {
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                if (AudioContextClass) {
+                    globalAudioCtx = new AudioContextClass();
+                }
+            }
+            if (globalAudioCtx && globalAudioCtx.state === 'suspended') {
+                globalAudioCtx.resume();
+            }
+            return globalAudioCtx;
+        };
+
         const playAlertSound = () => {
             try {
-                const AudioContext = window.AudioContext || window.webkitAudioContext;
-                if (!AudioContext) return;
-                const ctx = new AudioContext();
+                const ctx = getAudioContext();
+                if (!ctx) return;
                 
-                [0, 0.25, 0.5, 0.75].forEach(delay => {
+                [0, 0.2, 0.4, 0.6, 0.8].forEach(delay => {
                     const osc = ctx.createOscillator();
                     const gain = ctx.createGain();
-                    osc.type = 'sine';
-                    osc.frequency.setValueAtTime(880, ctx.currentTime + delay);
-                    osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + delay + 0.18);
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(987.77, ctx.currentTime + delay);
+                    osc.frequency.exponentialRampToValueAtTime(1975.53, ctx.currentTime + delay + 0.16);
                     
-                    gain.gain.setValueAtTime(0.6, ctx.currentTime + delay);
-                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + delay + 0.22);
+                    gain.gain.setValueAtTime(0.8, ctx.currentTime + delay);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + delay + 0.18);
                     
                     osc.connect(gain);
                     gain.connect(ctx.destination);
                     
                     osc.start(ctx.currentTime + delay);
-                    osc.stop(ctx.currentTime + delay + 0.23);
+                    osc.stop(ctx.currentTime + delay + 0.19);
                 });
             } catch (e) {
                 console.warn("Audio Alert Error:", e);
@@ -308,6 +321,11 @@
             ]);
             const [newWholesaleName, setNewWholesaleName] = React.useState('');
             const [newWholesalePhone, setNewWholesalePhone] = React.useState('');
+
+            const [editingWholesaleId, setEditingWholesaleId] = React.useState(null);
+            const [editWholesaleName, setEditWholesaleName] = React.useState('');
+            const [editWholesalePhone, setEditWholesalePhone] = React.useState('');
+
             const [newStaffName, setNewStaffName] = React.useState('');
             const [newStaffPin, setNewStaffPin] = React.useState('');
 
@@ -322,6 +340,14 @@
             };
 
             React.useEffect(() => {
+                const unlockAudio = () => {
+                    getAudioContext();
+                    window.removeEventListener('click', unlockAudio);
+                    window.removeEventListener('touchstart', unlockAudio);
+                };
+                window.addEventListener('click', unlockAudio);
+                window.addEventListener('touchstart', unlockAudio);
+
                 const unsubProducts = db.collection('products').onSnapshot(async (snapshot) => {
                     setIsFirebaseConnected(true);
                     let items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -704,6 +730,33 @@
                     await db.collection('settings').doc('farm_config').set({ wholesaleWhitelist: updatedList }, { merge: true });
                     showToast('🗑️ ลบรายชื่อเรียบร้อย', 'ลบร้านค้าออกจากระบบสิทธิ์ราคาส่งแล้ว', 'info');
                 } catch (err) {}
+            };
+
+            const handleStartEditWholesale = (shop) => {
+                setEditingWholesaleId(shop.id);
+                setEditWholesaleName(shop.name);
+                setEditWholesalePhone(shop.phone);
+            };
+
+            const handleSaveEditWholesale = async (e) => {
+                e.preventDefault();
+                if (!editWholesaleName.trim() || !editWholesalePhone.trim()) return;
+
+                const updatedList = wholesaleWhitelist.map(w => 
+                    w.id === editingWholesaleId 
+                        ? { ...w, name: editWholesaleName.trim(), phone: editWholesalePhone.trim() } 
+                        : w
+                );
+
+                setWholesaleWhitelist(updatedList);
+                setEditingWholesaleId(null);
+
+                try {
+                    await db.collection('settings').doc('farm_config').set({ wholesaleWhitelist: updatedList }, { merge: true });
+                    showToast('✅ แก้ไขข้อมูลสำเร็จ', `อัปเดตข้อมูลร้าน ${editWholesaleName} เรียบร้อยแล้ว`, 'success');
+                } catch (err) {
+                    showToast('❌ บันทึกไม่สำเร็จ', 'เกิดข้อผิดพลาดในการบันทึกข้อมูลลงคลาวด์', 'error');
+                }
             };
 
             const handleSaveFarmSettings = async (e) => {
@@ -1334,15 +1387,31 @@
                                                             <div className="py-4 text-center text-slate-400">ยังไม่มีรายชื่อร้านค้าในระบบ</div>
                                                         ) : (
                                                             wholesaleWhitelist.map((shop, idx) => (
-                                                                <div key={shop.id || idx} className="py-3 flex items-center justify-between">
-                                                                    <div className="flex items-center gap-2">
-                                                                        <span className="w-6 h-6 bg-emerald-100 text-emerald-800 rounded-lg flex items-center justify-center font-bold text-[10px]">{idx + 1}</span>
-                                                                        <div>
-                                                                            <p className="font-extrabold text-slate-900">{shop.name}</p>
-                                                                            <p className="text-slate-400 font-mono text-[11px]">📞 {shop.phone}</p>
+                                                                <div key={shop.id || idx} className="py-3">
+                                                                    {editingWholesaleId === shop.id ? (
+                                                                        <form onSubmit={handleSaveEditWholesale} className="flex flex-col sm:flex-row items-center gap-2 bg-amber-50 p-2.5 rounded-2xl border border-amber-200">
+                                                                            <input type="text" required value={editWholesaleName} onChange={e => setEditWholesaleName(e.target.value)} className="w-full sm:flex-1 p-2 border rounded-xl bg-white outline-none focus:border-farm-800" placeholder="ชื่อร้านค้า" />
+                                                                            <input type="tel" required value={editWholesalePhone} onChange={e => setEditWholesalePhone(e.target.value)} className="w-full sm:w-36 p-2 border rounded-xl bg-white text-center font-mono font-bold outline-none focus:border-farm-800" placeholder="เบอร์โทร" />
+                                                                            <div className="flex gap-1 w-full sm:w-auto">
+                                                                                <button type="submit" className="flex-1 sm:flex-initial px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl shadow">💾 บันทึก</button>
+                                                                                <button type="button" onClick={() => setEditingWholesaleId(null)} className="flex-1 sm:flex-initial px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl">ยกเลิก</button>
+                                                                            </div>
+                                                                        </form>
+                                                                    ) : (
+                                                                        <div className="flex items-center justify-between">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className="w-6 h-6 bg-emerald-100 text-emerald-800 rounded-lg flex items-center justify-center font-bold text-[10px]">{idx + 1}</span>
+                                                                                <div>
+                                                                                    <p className="font-extrabold text-slate-900">{shop.name}</p>
+                                                                                    <p className="text-slate-400 font-mono text-[11px]">📞 {shop.phone}</p>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="flex items-center gap-1">
+                                                                                <button type="button" onClick={() => handleStartEditWholesale(shop)} className="text-amber-700 bg-amber-50 hover:bg-amber-100 font-bold px-2.5 py-1 rounded-lg border border-amber-200 transition-all text-[11px]">✏️ แก้ไข</button>
+                                                                                <button type="button" onClick={() => handleDeleteWholesaleCustomer(shop.id)} className="text-rose-600 bg-rose-50 hover:bg-rose-100 font-bold px-2.5 py-1 rounded-lg border border-rose-200 transition-all text-[11px]">🗑️ ลบ</button>
+                                                                            </div>
                                                                         </div>
-                                                                    </div>
-                                                                    <button type="button" onClick={() => handleDeleteWholesaleCustomer(shop.id)} className="text-rose-500 font-bold hover:underline px-2 py-1 rounded-lg hover:bg-rose-50 transition-all text-[11px]">ลบรายชื่อ</button>
+                                                                    )}
                                                                 </div>
                                                             ))
                                                         )}
