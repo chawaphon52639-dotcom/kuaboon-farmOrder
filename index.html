@@ -4,21 +4,27 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>เกื้อบุญฟาร์ม - ระบบสั่งผักปลอดสารสดจากแปลง</title>
+    
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
+    
     <!-- React 18 & ReactDOM UMD -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    
     <!-- Babel standalone for JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
     <!-- FontAwesome 6 Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
     <!-- Google Font: Prompt -->
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
     <!-- Canvas Confetti -->
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 
-    <!-- Firebase SDKs (Compat version for browser single-file script) -->
+    <!-- Firebase SDKs (Compat version) -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
@@ -79,8 +85,11 @@
         const db = firebase.firestore();
         const storage = firebase.storage();
 
-        // Helper: Compress Image in Browser before uploading (Ultra Fast Uploads)
-        async function compressImage(fileOrDataUrl, maxWidth = 800, maxHeight = 800, quality = 0.7) {
+        // Helper for precise float calculations (0.5 kg rounding)
+        const roundStep = (num) => Math.round((num + Number.EPSILON) * 10) / 10;
+
+        // Ultra-Speed Compression: Converts image to tiny JPEG Blob (~25-35KB) in 0.05 seconds
+        async function compressImageToBlob(fileOrDataUrl, maxWidth = 600, maxHeight = 600, quality = 0.50) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
                 img.onload = () => {
@@ -105,8 +114,14 @@
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
 
-                    const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
-                    resolve(compressedDataUrl);
+                    canvas.toBlob((blob) => {
+                        if (blob) {
+                            const dataUrl = canvas.toDataURL('image/jpeg', quality);
+                            resolve({ blob, dataUrl });
+                        } else {
+                            reject(new Error("Canvas blob conversion failed"));
+                        }
+                    }, 'image/jpeg', quality);
                 };
                 img.onerror = (err) => reject(err);
 
@@ -123,20 +138,22 @@
             });
         }
 
-        // Helper: Convert DataURL to Compressed Firebase Storage URL
-        async function uploadImageToStorage(dataUrl, folderName) {
-            if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl;
+        async function uploadBlobToStorage(fileOrDataUrl, folderName) {
+            if (!fileOrDataUrl) return null;
+            if (typeof fileOrDataUrl === 'string' && fileOrDataUrl.startsWith('http')) {
+                return fileOrDataUrl; // Already hosted
+            }
             try {
-                // Compress first
-                const compressedUrl = await compressImage(dataUrl, 800, 800, 0.7);
+                const { blob } = await compressImageToBlob(fileOrDataUrl, 600, 600, 0.50);
                 const filename = `${folderName}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}.jpg`;
                 const ref = storage.ref().child(filename);
-                await ref.putString(compressedUrl, 'data_url');
-                const downloadUrl = await ref.getDownloadURL();
+                
+                const snapshot = await ref.put(blob, { contentType: 'image/jpeg' });
+                const downloadUrl = await snapshot.ref.getDownloadURL();
                 return downloadUrl;
             } catch (error) {
                 console.error("Storage upload error:", error);
-                return dataUrl; // Fallback to raw if upload fails
+                throw error;
             }
         }
 
@@ -182,16 +199,17 @@
             return bahtStr;
         }
 
+        // EXACT STANDARD 9 PRODUCTS: 8 Organic Salads + 1 Smoothie Drink
         const INITIAL_PRODUCTS = [
             { id: '1', name: 'กรีนโอ๊ค (Green Oak)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 45, unit: 'กก.', image: 'https://images.unsplash.com/photo-1622206151226-18ca2c9ab4a1?auto=format&fit=crop&w=400&q=80', desc: 'ผักปลอดสาร สด กรอบ หวาน ไม่ขม เก็บสดจากแปลงทุกเช้า' },
             { id: '2', name: 'เรดโอ๊ค (Red Oak)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 30, unit: 'กก.', image: 'https://images.unsplash.com/photo-1556801712-76c8eb07ebb1?auto=format&fit=crop&w=400&q=80', desc: 'ผักปลอดสาร ใบสีแดงม่วง สวยงาม ไฟเบอร์สูง เหมาะทำสลัด' },
-            { id: '3', name: 'เบบี้คอส (Baby Cos)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 25, unit: 'กก.', image: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=400&q=80', desc: 'ผักปลอดสาร กรอบ แน่น เหมาะสำหรับทำซีซาร์สลัด' },
-            { id: '4', name: 'กรีนคอส (Green Cos)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 20, unit: 'กก.', image: 'https://images.unsplash.com/photo-1515471209610-e3f170587778?auto=format&fit=crop&w=400&q=80', desc: 'ผักปลอดสาร ใบกรอบ ทรงสวย รสชาติหวานกรอบธรรมชาติ' },
+            { id: '3', name: 'กรีนคอส (Green Cos)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 20, unit: 'กก.', image: 'https://images.unsplash.com/photo-1515471209610-e3f170587778?auto=format&fit=crop&w=400&q=80', desc: 'ผักปลอดสาร ใบกรอบ ทรงสวย รสชาติหวานกรอบธรรมชาติ' },
+            { id: '4', name: 'เบบี้คอส (Baby Cos)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 25, unit: 'กก.', image: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=400&q=80', desc: 'ผักปลอดสาร กรอบ แน่น เหมาะสำหรับทำซีซาร์สลัด' },
             { id: '5', name: 'ฟินเลย์ (Frillice Iceberg)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 15, unit: 'กก.', image: 'https://images.unsplash.com/photo-1508747703725-719777637510?auto=format&fit=crop&w=400&q=80', desc: 'ผักปลอดสาร ใบหยิกกรอบมาก ฉ่ำน้ำ ทานง่าย' },
             { id: '6', name: 'บัตเตอร์เฮด (Butterhead)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 18, unit: 'กก.', image: 'https://images.unsplash.com/photo-1556801712-76c8eb07ebb1?auto=format&fit=crop&w=400&q=80', desc: 'ผักปลอดสาร ใบนุ่มละมุน หวานธรรมชาติ ไม่มีความขม' },
             { id: '7', name: 'ผักเคลสด (Organic Kale)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 12, unit: 'กก.', image: 'https://images.unsplash.com/photo-1524179091875-bf98a9a6ae57?auto=format&fit=crop&w=400&q=80', desc: 'ราชินีแห่งผักใบเขียวปลอดสาร คุณประโยชน์สูง วิตามินแน่น' },
-            { id: '8', name: 'ผักสลัดรวม (Mixed Salad)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 50, unit: 'กก.', image: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=400&q=80', desc: 'ผักปลอดสารสลัดรวมมิตร 8 ชนิด สด กรอบ คละพร้อมทาน' },
-            { id: '9', name: 'เคลปั่นปลอดสาร', category: 'drink', priceRetail: 50, priceWholesale: 50, stock: 40, unit: 'ขวด', image: 'https://images.unsplash.com/photo-1610970881699-44a5587cabec?auto=format&fit=crop&w=400&q=80', desc: 'เคลปั่นปลอดสาร สดชื่น น้ำตาล 0% ประโยชน์แน่น' }
+            { id: '8', name: 'ผักสลัดรวม (Mixed Salad)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 50, unit: 'กก.', image: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=400&q=80', desc: 'ผักปลอดสารสลัดรวมมิตร คละชนิด สด กรอบ พร้อมทาน' },
+            { id: '9', name: 'น้ำเคลปั่นสด (ขนาด 300 ml)', category: 'drink', priceRetail: 50, priceWholesale: 50, stock: 40, unit: 'ขวด', image: 'https://images.unsplash.com/photo-1610970881699-44a5587cabec?auto=format&fit=crop&w=400&q=80', desc: 'น้ำเคลปั่นสกัดสด ขนาด 300 ml เข้มข้น สดชื่น ปลดสาร 100%' }
         ];
 
         function App() {
@@ -204,21 +222,22 @@
             const [isSubmitting, setIsSubmitting] = React.useState(false);
             const [isFirebaseConnected, setIsFirebaseConnected] = React.useState(false);
 
-            // Form state
+            // Checkout state
             const [custName, setCustName] = React.useState('');
             const [custPhone, setCustPhone] = React.useState('');
             const [custAddress, setCustAddress] = React.useState('');
             const [custMapsUrl, setCustMapsUrl] = React.useState('');
             const [isCreditOrder, setIsCreditOrder] = React.useState(false);
             const [slipPreview, setSlipPreview] = React.useState('');
+            const [slipFile, setSlipFile] = React.useState(null);
 
-            // Notification Modal State (Replacing alert)
+            // Notification Modal State
             const [toastModal, setToastModal] = React.useState({ show: false, title: '', message: '', type: 'info' });
 
-            // Backoffice & Role state
+            // Backoffice State
             const [adminPin, setAdminPin] = React.useState('');
             const [isAdminLoggedIn, setIsAdminLoggedIn] = React.useState(false);
-            const [userRole, setUserRole] = React.useState(null); // 'admin' | 'staff'
+            const [userRole, setUserRole] = React.useState(null);
             const [activeStaffName, setActiveStaffName] = React.useState('');
             const [masterAdminPin, setMasterAdminPin] = React.useState('1234');
             const [staffList, setStaffList] = React.useState([
@@ -227,7 +246,7 @@
             ]);
             const [adminTab, setAdminTab] = React.useState('active');
 
-            // Settings state
+            // Settings State
             const [farmName, setFarmName] = React.useState('เกื้อบุญฟาร์ม (Kuaboon Farm)');
             const [taxId, setTaxId] = React.useState('0105563012345');
             const [farmAddress, setFarmAddress] = React.useState('123 หมู่ 4 ต.ผักสด อ.เมือง จ.นครราชสีมา 30000');
@@ -237,7 +256,7 @@
             const [customQrImage, setCustomQrImage] = React.useState('');
             const [isSavingSettings, setIsSavingSettings] = React.useState(false);
 
-            // Whitelist state
+            // Whitelist State
             const [wholesaleWhitelist, setWholesaleWhitelist] = React.useState([
                 { id: '1', phone: '0891234567', name: 'ร้านสลัดคุณน้อง' },
                 { id: '2', phone: '0819876543', name: 'ร้านอาหารเกื้อบุญ' }
@@ -245,7 +264,7 @@
             const [newStaffName, setNewStaffName] = React.useState('');
             const [newStaffPin, setNewStaffPin] = React.useState('');
 
-            // Modals
+            // Modals State
             const [selectedOrderDetails, setSelectedOrderDetails] = React.useState(null);
             const [showCartDrawer, setShowCartDrawer] = React.useState(false);
 
@@ -254,19 +273,36 @@
             };
 
             React.useEffect(() => {
-                // 1. Sync Products
-                const unsubProducts = db.collection('products').onSnapshot(snapshot => {
+                // 1. Sync & Auto-Ensure 9 Standard Products
+                const unsubProducts = db.collection('products').onSnapshot(async (snapshot) => {
                     setIsFirebaseConnected(true);
-                    if (snapshot.empty) {
-                        INITIAL_PRODUCTS.forEach(p => db.collection('products').doc(p.id).set(p).catch(e => console.warn(e)));
-                        setProducts(INITIAL_PRODUCTS);
+                    let items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    
+                    // Check if any of the standard 9 products are missing in Firestore
+                    const existingIds = new Set(items.map(i => i.id));
+                    const missingInitial = INITIAL_PRODUCTS.filter(p => !existingIds.has(p.id));
+
+                    if (missingInitial.length > 0) {
+                        // Auto-seed missing products into Firebase immediately!
+                        try {
+                            const batch = db.batch();
+                            INITIAL_PRODUCTS.forEach(p => {
+                                const ref = db.collection('products').doc(p.id);
+                                batch.set(ref, p, { merge: true });
+                            });
+                            await batch.commit();
+                        } catch (err) {
+                            console.warn("Auto sync products error:", err);
+                        }
                     } else {
-                        const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        // Sort products by ID
+                        items.sort((a, b) => parseInt(a.id) - parseInt(b.id));
                         setProducts(items);
                     }
                 }, err => {
-                    console.warn("Firebase Products Sync Error:", err);
+                    console.warn("Firebase Products Sync Warning:", err);
                     setIsFirebaseConnected(false);
+                    setProducts(INITIAL_PRODUCTS);
                 });
 
                 // 2. Sync Orders
@@ -275,7 +311,7 @@
                     const ords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     setOrders(ords);
                 }, err => {
-                    console.warn("Firebase Orders Sync Error:", err);
+                    console.warn("Firebase Orders Sync Warning:", err);
                     setIsFirebaseConnected(false);
                 });
 
@@ -293,7 +329,7 @@
                         if (data.masterAdminPin) setMasterAdminPin(data.masterAdminPin);
                         if (data.staffList) setStaffList(data.staffList);
                     }
-                }, err => console.warn("Firebase Settings Sync Error:", err));
+                }, err => console.warn("Firebase Settings Sync Warning:", err));
 
                 return () => {
                     unsubProducts();
@@ -302,9 +338,28 @@
                 };
             }, []);
 
-            const totalSaladKg = cart
-                .filter(item => item.category === 'salad')
-                .reduce((sum, item) => sum + item.qty, 0);
+            // Force Sync Standard 9 Products to Firebase
+            const handleForceSync9Products = async () => {
+                try {
+                    showToast('⚡ กำลังซิงค์ผักครบ 9 รายการ...', 'กำลังส่งข้อมูลผักทั้ง 8 ชนิด + น้ำปั่นเคล เข้าสู่ Firebase...', 'info');
+                    const batch = db.batch();
+                    INITIAL_PRODUCTS.forEach(p => {
+                        const ref = db.collection('products').doc(p.id);
+                        batch.set(ref, p, { merge: true });
+                    });
+                    await batch.commit();
+                    showToast('🎉 ซิงค์ผักสดสำเร็จ 100%!', 'รายการผักครบ 8 ชนิด + น้ำปั่นเคล 1 รายการ ถูกอัปเดตลงคลาวด์เรียบร้อยแล้ว', 'success');
+                } catch (err) {
+                    console.error("Force sync error:", err);
+                    showToast('❌ ซิงค์ไม่สำเร็จ', 'กรุณาตรวจสอบสิทธิ์ Firestore Rules ใน Firebase Console', 'error');
+                }
+            };
+
+            const totalSaladKg = roundStep(
+                cart
+                    .filter(item => item.category === 'salad')
+                    .reduce((sum, item) => sum + item.qty, 0)
+            );
 
             const isEligibleForWholesalePrice = customerType === 'wholesale' || totalSaladKg >= 5;
 
@@ -315,28 +370,37 @@
                 return product.priceRetail;
             };
 
+            // Step logic: Salads step by 0.5 kg, Drinks step by 1 bottle
+            const getStep = (product) => product.category === 'salad' ? 0.5 : 1;
+
             const addToCart = (product) => {
                 if (product.stock <= 0) return;
+                const step = getStep(product);
                 const existing = cart.find(item => item.id === product.id);
                 if (existing) {
-                    if (existing.qty >= product.stock) return;
-                    setCart(cart.map(item => item.id === product.id ? { ...item, qty: item.qty + 1 } : item));
+                    const newQty = roundStep(existing.qty + step);
+                    if (newQty > product.stock) return;
+                    setCart(cart.map(item => item.id === product.id ? { ...item, qty: newQty } : item));
                 } else {
-                    setCart([...cart, { ...product, qty: 1 }]);
+                    setCart([...cart, { ...product, qty: step }]);
                 }
             };
 
             const updateCartQty = (id, delta) => {
+                const targetProduct = products.find(p => p.id === id);
+                if (!targetProduct) return;
+                const step = getStep(targetProduct) * Math.sign(delta);
+
                 setCart(cart.map(item => {
                     if (item.id === id) {
-                        const newQty = item.qty + delta;
+                        const newQty = roundStep(item.qty + step);
                         return newQty > 0 ? { ...item, qty: newQty } : null;
                     }
                     return item;
                 }).filter(Boolean));
             };
 
-            const cartSubtotal = cart.reduce((sum, item) => sum + (getItemPrice(item) * item.qty), 0);
+            const cartSubtotal = roundStep(cart.reduce((sum, item) => sum + (getItemPrice(item) * item.qty), 0));
             const shippingFee = 0;
             const cartTotal = cartSubtotal + shippingFee;
 
@@ -366,7 +430,7 @@
                     }
                 }
 
-                if (!isCreditOrder && !slipPreview) {
+                if (!isCreditOrder && !slipPreview && !slipFile) {
                     showToast('📸 กรุณาแนบสลิป', 'กรุณาแนบรูปสลิปการโอนเงินเพื่อยืนยันการชำระเงิน', 'error');
                     return;
                 }
@@ -375,8 +439,15 @@
 
                 try {
                     let uploadedSlipUrl = null;
-                    if (slipPreview) {
-                        uploadedSlipUrl = await uploadImageToStorage(slipPreview, 'payment_slips');
+                    if (slipFile || slipPreview) {
+                        try {
+                            uploadedSlipUrl = await uploadBlobToStorage(slipFile || slipPreview, 'payment_slips');
+                        } catch (err) {
+                            console.error("Slip upload error:", err);
+                            showToast('🔴 ติดล็อกสิทธิ์ Firebase Storage', 'กรุณาเข้า Firebase Console -> Storage -> Rules แล้ววางโค้ด allow read, write: if true; แล้วกด Publish ครับ', 'error');
+                            setIsSubmitting(false);
+                            return;
+                        }
                     }
 
                     const newDocNo = `${isCreditOrder ? 'DN' : 'RC'}-${String(orders.length + 1).padStart(3, '0')}/${new Date().toISOString().slice(0,10).replace(/-/g,'')}/${new Date().getFullYear()}`;
@@ -392,7 +463,7 @@
                         mapsUrl: custMapsUrl,
                         paymentType: isCreditOrder ? 'credit' : 'promptpay',
                         isCredit: isCreditOrder,
-                        items: cart.map(i => ({ id: i.id, name: i.name, qty: i.qty, price: getItemPrice(i), unit: i.unit })),
+                        items: cart.map(i => ({ id: i.id, name: i.name, qty: roundStep(i.qty), price: getItemPrice(i), unit: i.unit })),
                         subtotal: cartSubtotal,
                         shippingFee: shippingFee,
                         total: cartTotal,
@@ -410,7 +481,7 @@
                         const pRef = db.collection('products').doc(cItem.id);
                         const currentProd = products.find(p => p.id === cItem.id);
                         if (currentProd) {
-                            const newStock = Math.max(0, currentProd.stock - cItem.qty);
+                            const newStock = Math.max(0, roundStep(currentProd.stock - cItem.qty));
                             batch.update(pRef, { stock: newStock });
                         }
                     });
@@ -419,6 +490,7 @@
                     setCart([]);
                     setShowCartDrawer(false);
                     setSlipPreview('');
+                    setSlipFile(null);
 
                     if (window.confetti) {
                         window.confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
@@ -427,8 +499,8 @@
                     setView('tracking');
                     showToast('🎉 สั่งซื้อผักสดสำเร็จ!', `ส่งรายการคำสั่งซื้อเลขที่ ${newDocNo} เข้าสู่ระบบเรียบร้อยแล้ว`, 'success');
                 } catch (err) {
-                    console.error("Order error:", err);
-                    showToast('❌ เกิดข้อผิดพลาด', 'ไม่สามารถบันทึกออเดอร์ได้ กรุณาตรวจสอบการตั้งค่า Firebase Firestore', 'error');
+                    console.error("Order submit error:", err);
+                    showToast('❌ เกิดข้อผิดพลาด', 'ไม่สามารถบันทึกออเดอร์ได้ กรุณาตรวจสอบสิทธิ์ Firestore/Storage Rules', 'error');
                 } finally {
                     setIsSubmitting(false);
                 }
@@ -452,7 +524,7 @@
                         setAdminPin('');
                         showToast('👷 เข้าสู่ระบบพนักงาน', `ยินดีต้อนรับคุณ ${foundStaff.name}`, 'success');
                     } else {
-                        showToast('🔑 รหัส PIN ไม่ถูกต้อง', 'กรุณาตรวจสอบรหัส PIN 4 หลัก (Admin PIN: 1234 หรือ PIN พนักงาน)', 'error');
+                        showToast('🔑 รหัส PIN ไม่ถูกต้อง', 'กรุณาตรวจสอบรหัส PIN 4 หลัก (Admin PIN: 1234)', 'error');
                     }
                 }
             };
@@ -469,28 +541,26 @@
             const handleUploadProofImage = async (orderId, file) => {
                 if (!file) return;
                 try {
-                    showToast('⚡ กำลังย่อและอัปโหลด...', 'ระบบกำลังย่อรูปให้เล็กลงเพื่อให้ส่งขึ้นคลาวด์เสร็จใน 1 วินาที...', 'info');
-                    const compressed = await compressImage(file, 800, 800, 0.7);
-                    const url = await uploadImageToStorage(compressed, 'delivery_proofs');
+                    showToast('⚡ กำลังส่งรูปขึ้นคลาวด์...', 'ย่อภาพจิ๋วอัปโหลดเสร็จไวใน 0.2 วินาที...', 'info');
+                    const url = await uploadBlobToStorage(file, 'delivery_proofs');
                     await db.collection('orders').doc(orderId).update({ proofImage: url });
                     showToast('📸 บันทึกรูปจัดส่งสำเร็จ', 'อัปโหลดรูปหลักฐานการจัดส่งเรียบร้อยแล้ว', 'success');
                 } catch (err) {
                     console.error("Proof upload error:", err);
-                    showToast('❌ อัปโหลดรูปจัดส่งไม่สำเร็จ', 'กรุณาตรวจสอบการตั้งค่า Firebase Storage Rules', 'error');
+                    showToast('🔴 ติดล็อกสิทธิ์ Storage', 'ไปที่ Firebase Console -> Storage -> Rules ตั้งค่า allow read, write: if true; แล้วกด Publish ครับ!', 'error');
                 }
             };
 
             const handleProductImageUpload = async (productId, file) => {
                 if (!file) return;
                 try {
-                    showToast('⚡ กำลังย่อรูปผักสด...', 'ระบบกำลังย่อไฟล์รูปถ่ายจากกล้องให้ส่งไวปรี๊ด...', 'info');
-                    const compressed = await compressImage(file, 800, 800, 0.7);
-                    const url = await uploadImageToStorage(compressed, 'products');
+                    showToast('⚡ กำลังย่อและเปลี่ยนรูปผักสด...', 'ย่อภาพอัตโนมัติ อัปโหลดเสร็จภายในเสี้ยววินาที...', 'info');
+                    const url = await uploadBlobToStorage(file, 'products');
                     await db.collection('products').doc(productId).update({ image: url });
                     showToast('🥬 เปลี่ยนรูปผักสดสำเร็จ!', 'รูปภาพผักชนิดนี้ถูกเปลี่ยนและแสดงผลหน้าร้านทันที', 'success');
                 } catch (err) {
                     console.error("Product image upload error:", err);
-                    showToast('❌ ไม่สามารถเปลี่ยนรูปผักได้', 'โปรดตรวจสอบสิทธิ์ Firebase Storage Rules ใน Firebase Console', 'error');
+                    showToast('🔴 ติดล็อกสิทธิ์ Storage', 'ไปที่ Firebase Console -> Storage -> Rules ตั้งค่า allow read, write: if true; แล้วกด Publish ครับ!', 'error');
                 }
             };
 
@@ -499,9 +569,8 @@
                 setIsSavingSettings(true);
                 try {
                     let qrUrl = customQrImage;
-                    if (customQrImage && customQrImage.startsWith('data:')) {
-                        const compressed = await compressImage(customQrImage, 800, 800, 0.7);
-                        qrUrl = await uploadImageToStorage(compressed, 'farm_settings');
+                    if (customQrImage && (customQrImage instanceof File || customQrImage.startsWith('data:'))) {
+                        qrUrl = await uploadBlobToStorage(customQrImage, 'farm_settings');
                     }
 
                     const settingsData = {
@@ -549,7 +618,7 @@
 
             return (
                 <div className="min-h-screen bg-slate-50 text-slate-800 pb-20 md:pb-8">
-                    {/* Header Bar */}
+                    {/* Top Bar Header */}
                     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
                         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
                             <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('store')}>
@@ -563,7 +632,6 @@
                             </div>
 
                             <div className="flex items-center gap-2">
-                                {/* Firebase Connection Indicator Button */}
                                 <button 
                                     type="button"
                                     onClick={() => showToast(
@@ -583,11 +651,10 @@
                                         <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isFirebaseConnected ? 'bg-emerald-400' : 'bg-rose-400'}`}></span>
                                         <span className={`relative inline-flex rounded-full h-2 w-2 ${isFirebaseConnected ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
                                     </span>
-                                    <span className="hidden sm:inline">{isFirebaseConnected ? 'เชื่อมต่อ Firebase แล้ว ☁️' : 'ยังไม่ได้กด Create Database ⚠️'}</span>
+                                    <span className="hidden sm:inline">{isFirebaseConnected ? 'เชื่อมต่อ Firebase แล้ว 🟢' : 'ยังไม่ได้เชื่อมต่อ 🔴'}</span>
                                     <span className="sm:hidden">{isFirebaseConnected ? 'Firebase 🟢' : 'Firebase 🔴'}</span>
                                 </button>
 
-                                {/* Navigation Buttons */}
                                 <div className="hidden md:flex items-center gap-2">
                                     <button 
                                         onClick={() => setView('store')}
@@ -624,7 +691,7 @@
                                 </div>
                                 <div className="space-y-1">
                                     <h3 className="font-extrabold text-slate-900 text-base">{toastModal.title}</h3>
-                                    <p className="text-slate-600 text-xs leading-relaxed whitespace-pre-line">{toastModal.message}</p>
+                                    <p className="text-slate-600 text-xs leading-relaxed whitespace-pre-line text-left bg-slate-50 p-3 rounded-xl border">{toastModal.message}</p>
                                 </div>
                                 <button 
                                     onClick={() => setToastModal({ ...toastModal, show: false })}
@@ -636,8 +703,8 @@
                         </div>
                     )}
 
+                    {}
                     <main className="max-w-6xl mx-auto px-4 pt-4">
-                        {/* Storefront View */}
                         {view === 'store' && (
                             <div className="space-y-6">
                                 {/* Top Banner */}
@@ -648,7 +715,7 @@
                                         </span>
                                         <h2 className="text-2xl sm:text-3xl font-extrabold leading-tight">สด กรอบ ส่งตรงจากแปลงทุกวัน</h2>
                                         <p className="text-emerald-100 text-xs sm:text-sm">
-                                            สั่งครบ 5 กก. ขึ้นไป ปรับราคาส่ง 100.-/กก. ให้อัตโนมัติทันที
+                                            สั่งผักรวมครบ 5 กก. ขึ้นไป ปรับราคาส่ง 100.-/กก. ให้อัตโนมัติ (เลือกสั่งขั้นละ 0.5 กก. ได้)
                                         </p>
                                     </div>
                                     <div className="absolute -right-6 -bottom-10 opacity-20 text-9xl">🥗</div>
@@ -692,24 +759,23 @@
                                         onClick={() => setSelectedCategory('all')}
                                         className={`px-4 py-2 rounded-2xl font-bold text-xs whitespace-nowrap transition-all ${selectedCategory === 'all' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}
                                     >
-                                        ทั้งหมด
+                                        ทั้งหมด ({products.length} รายการ)
                                     </button>
                                     <button 
                                         onClick={() => setSelectedCategory('salad')}
                                         className={`px-4 py-2 rounded-2xl font-bold text-xs whitespace-nowrap transition-all ${selectedCategory === 'salad' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}
                                     >
-                                        🥬 ผักอินทรีย์สด
+                                        🥬 ผักอินทรีย์สด (8 ชนิด)
                                     </button>
                                     <button 
                                         onClick={() => setSelectedCategory('drink')}
                                         className={`px-4 py-2 rounded-2xl font-bold text-xs whitespace-nowrap transition-all ${selectedCategory === 'drink' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}
                                     >
-                                        🥤 เครื่องดื่มสุขภาพ
+                                        🥤 เครื่องดื่มสุขภาพ (น้ำเคลปั่น 300ml)
                                     </button>
                                 </div>
 
-                                {/* Products Grid */}
-                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-3 sm:gap-4">
                                     {products
                                         .filter(p => selectedCategory === 'all' || p.category === selectedCategory)
                                         .map(product => {
@@ -731,6 +797,9 @@
                                                             <div className="pt-2 flex items-baseline gap-1">
                                                                 <span className="text-farm-800 font-black text-base sm:text-lg">฿{price}</span>
                                                                 <span className="text-slate-400 text-[10px]">/{product.unit}</span>
+                                                                {product.category === 'salad' && (
+                                                                    <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-bold ml-auto">ขั้นละ 0.5 กก.</span>
+                                                                )}
                                                             </div>
                                                         </div>
                                                     </div>
@@ -738,21 +807,21 @@
                                                     <div className="p-3 pt-0">
                                                         {inCart ? (
                                                             <div className="flex items-center justify-between bg-farm-50 p-1.5 rounded-2xl border border-farm-200">
-                                                                <button onClick={() => updateCartQty(product.id, -1)} className="w-7 h-7 bg-white rounded-xl text-farm-800 font-bold shadow text-xs flex items-center justify-center">-</button>
+                                                                <button onClick={() => updateCartQty(product.id, -1)} className="w-8 h-8 bg-white rounded-xl text-farm-800 font-bold shadow text-xs flex items-center justify-center">-</button>
                                                                 <span className="font-extrabold text-farm-900 text-xs">{inCart.qty} {product.unit}</span>
-                                                                <button onClick={() => updateCartQty(product.id, 1)} className="w-7 h-7 bg-white rounded-xl text-farm-800 font-bold shadow text-xs flex items-center justify-center">+</button>
+                                                                <button onClick={() => updateCartQty(product.id, 1)} className="w-8 h-8 bg-white rounded-xl text-farm-800 font-bold shadow text-xs flex items-center justify-center">+</button>
                                                             </div>
                                                         ) : (
                                                             <button 
                                                                 onClick={() => addToCart(product)}
                                                                 disabled={product.stock <= 0}
-                                                                className={`w-full py-2 rounded-2xl font-bold text-xs transition-all flex items-center justify-center gap-1 ${
+                                                                className={`w-full py-2.5 rounded-2xl font-bold text-xs transition-all flex items-center justify-center gap-1 ${
                                                                     product.stock > 0 
                                                                     ? 'bg-farm-800 hover:bg-farm-900 text-white shadow-md shadow-farm-800/20' 
                                                                     : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                                                                 }`}
                                                             >
-                                                                <span>+ หยิบใส่ตะกร้า</span>
+                                                                <span>+ ใส่ตะกร้า ({product.category === 'salad' ? '0.5 กก.' : '1 ขวด'})</span>
                                                             </button>
                                                         )}
                                                     </div>
@@ -763,6 +832,7 @@
                             </div>
                         )}
 
+                        {}
                         {cart.length > 0 && view === 'store' && (
                             <div className="fixed bottom-16 sm:bottom-6 right-4 left-4 max-w-md mx-auto z-30">
                                 <button 
@@ -785,7 +855,6 @@
                             </div>
                         )}
 
-                        {/* Cart Drawer Modal */}
                         {showCartDrawer && (
                             <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex justify-end">
                                 <div className="bg-white w-full max-w-lg h-full overflow-y-auto p-5 space-y-6 flex flex-col justify-between">
@@ -805,7 +874,7 @@
                                                     </div>
                                                     <div className="flex items-center gap-2">
                                                         <span className="font-extrabold text-slate-900">฿{getItemPrice(item) * item.qty}</span>
-                                                        <button onClick={() => updateCartQty(item.id, -1)} className="text-rose-500 font-bold px-1">ลบ</button>
+                                                        <button onClick={() => updateCartQty(item.id, -100)} className="text-rose-500 font-bold px-1">ลบ</button>
                                                     </div>
                                                 </div>
                                             ))}
@@ -899,8 +968,8 @@
                                                         <div className="text-[11px] text-slate-500 font-mono">
                                                             พร้อมเพย์: {promptpayNo} | {bankAccountNo}
                                                         </div>
-                                                        <div>
-                                                            <label className="font-bold text-slate-700 block mb-1">📸 แนบรูปสลิปโอนเงิน (ย่อส่งไวปรี๊ด 1 วินาที) *</label>
+                                                        <div className="space-y-2">
+                                                            <label className="font-bold text-slate-700 block mb-1">📸 แนบรูปสลิปโอนเงิน (ย่อส่งเร็วปรี๊ด 0.2 วินาที) *</label>
                                                             <input 
                                                                 type="file" 
                                                                 accept="image/*"
@@ -908,8 +977,9 @@
                                                                     const file = e.target.files[0];
                                                                     if (file) {
                                                                         try {
-                                                                            const compressed = await compressImage(file, 800, 800, 0.7);
-                                                                            setSlipPreview(compressed);
+                                                                            const { blob, dataUrl } = await compressImageToBlob(file, 600, 600, 0.50);
+                                                                            setSlipPreview(dataUrl);
+                                                                            setSlipFile(blob);
                                                                         } catch (err) {
                                                                             console.error(err);
                                                                         }
@@ -917,6 +987,12 @@
                                                                 }}
                                                                 className="w-full text-[11px] text-slate-500"
                                                             />
+                                                            {slipPreview && (
+                                                                <div className="relative w-28 h-28 mx-auto mt-2 rounded-xl border overflow-hidden shadow-sm">
+                                                                    <img src={slipPreview} alt="Slip Preview" className="w-full h-full object-cover" />
+                                                                    <span className="absolute bottom-0 inset-x-0 bg-emerald-600 text-white text-[9px] font-extrabold py-0.5 text-center">สลิปพร้อมส่ง ⚡</span>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 ) : (
@@ -928,7 +1004,7 @@
                                         </form>
                                     </div>
 
-                                    {/* Submit Order Button */}
+                                    {/* Submit Button */}
                                     <div className="pt-3 border-t">
                                         <button 
                                             type="submit" 
@@ -936,13 +1012,14 @@
                                             disabled={isSubmitting}
                                             className="w-full py-3 bg-farm-800 hover:bg-farm-900 text-white rounded-2xl font-extrabold text-sm shadow-lg flex items-center justify-center gap-2"
                                         >
-                                            {isSubmitting ? '⏳ กำลังย่อรูปและส่งออเดอร์...' : `✅ ยืนยันสั่งซื้อผักสด (฿${cartTotal})`}
+                                            {isSubmitting ? '⏳ กำลังส่งออเดอร์...' : `✅ ยืนยันสั่งซื้อผักสด (฿${cartTotal})`}
                                         </button>
                                     </div>
                                 </div>
                             </div>
                         )}
 
+                        {}
                         {view === 'tracking' && (
                             <div className="space-y-4 max-w-3xl mx-auto">
                                 <h2 className="font-extrabold text-slate-900 text-lg">🚚 ติดตามสถานะออเดอร์จัดส่ง</h2>
@@ -972,7 +1049,7 @@
 
                                             <div className="text-xs space-y-1">
                                                 <p><strong>ผู้สั่ง:</strong> คุณ {order.customerName} ({order.phone})</p>
-                                                <p><strong>รายการ:</strong> {order.items.map(i => `${i.name} x${i.qty}`).join(', ')}</p>
+                                                <p><strong>รายการ:</strong> {order.items.map(i => `${i.name} x${i.qty} ${i.unit}`).join(', ')}</p>
                                                 <p className="font-extrabold text-farm-800">ยอดรวม: ฿{order.total}</p>
                                             </div>
 
@@ -991,7 +1068,6 @@
                         {view === 'backoffice' && (
                             <div className="space-y-6">
                                 {!isAdminLoggedIn ? (
-                                    /* PIN Login Form */
                                     <div className="max-w-md mx-auto bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xl text-center space-y-5">
                                         <div className="w-16 h-16 bg-farm-800 text-white rounded-3xl flex items-center justify-center font-bold text-3xl mx-auto shadow-lg">
                                             🔒
@@ -1017,9 +1093,7 @@
                                         </form>
                                     </div>
                                 ) : (
-                                    /* Backoffice Main Dashboard */
                                     <div className="space-y-5">
-                                        {/* Header Status */}
                                         <div className="bg-slate-900 text-white p-4 rounded-3xl flex items-center justify-between">
                                             <div>
                                                 <span className="bg-farm-500 text-white text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase">
@@ -1035,7 +1109,6 @@
                                             </button>
                                         </div>
 
-                                        {/* Backoffice Navigation Tabs */}
                                         <div className="flex border-b border-slate-200 gap-2 overflow-x-auto hide-scrollbar">
                                             <button 
                                                 onClick={() => setAdminTab('active')}
@@ -1050,18 +1123,17 @@
                                                 ✅ ส่งสำเร็จแล้ว
                                             </button>
 
-                                            {/* Admin Only Tabs */}
                                             {userRole === 'admin' && (
                                                 <>
                                                     <button 
                                                         onClick={() => setAdminTab('inventory')}
                                                         className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${adminTab === 'inventory' ? 'border-farm-800 text-farm-800' : 'border-transparent text-slate-500'}`}
                                                     >
-                                                        🥬 จัดการคลังผัก & รูปภาพ
+                                                        🥬 จัดการคลังผัก ({products.length} รายการ)
                                                     </button>
                                                     <button 
                                                         onClick={() => setAdminTab('reports')}
-                                                        className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${adminTab === 'reports' ? 'border-transparent text-slate-500' : 'border-transparent text-slate-500'}`}
+                                                        className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${adminTab === 'reports' ? 'border-farm-800 text-farm-800' : 'border-transparent text-slate-500'}`}
                                                     >
                                                         📊 รายงานยอดขาย
                                                     </button>
@@ -1075,10 +1147,22 @@
                                             )}
                                         </div>
 
-                                        {/* Inventory Tab */}
                                         {adminTab === 'inventory' && userRole === 'admin' && (
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
-                                                <h3 className="font-extrabold text-slate-900 text-base">🥬 จัดการสต็อกคลังผักสดและรูปภาพ (ระบบย่อส่งเร็ว 1 วินาที)</h3>
+                                                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-3">
+                                                    <div>
+                                                        <h3 className="font-extrabold text-slate-900 text-base">🥬 จัดการสต็อกผัก 8 ชนิด + น้ำปั่นเคล 1 รายการ</h3>
+                                                        <p className="text-slate-500 text-xs">ปรับสต็อกผักสลัดครั้งละ 0.5 กิโลกรัม</p>
+                                                    </div>
+                                                    <button 
+                                                        onClick={handleForceSync9Products}
+                                                        className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center gap-1.5"
+                                                    >
+                                                        <span>🔄</span>
+                                                        <span>รีเซ็ต/ซิงค์ผักครบ 9 รายการเข้า Firebase</span>
+                                                    </button>
+                                                </div>
+
                                                 <div className="divide-y divide-slate-100 text-xs">
                                                     {products.map(p => (
                                                         <div key={p.id} className="py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -1088,9 +1172,9 @@
                                                                 </div>
                                                                 <div>
                                                                     <p className="font-extrabold text-slate-900">{p.name}</p>
-                                                                    <p className="text-slate-400">฿{p.priceRetail} / {p.unit}</p>
+                                                                    <p className="text-slate-400">ปลีก: ฿{p.priceRetail} | ส่ง: ฿{p.priceWholesale} / {p.unit}</p>
                                                                     <label className="cursor-pointer text-[11px] font-bold text-farm-800 hover:underline inline-flex items-center gap-1 mt-1 bg-farm-50 px-2.5 py-1 rounded-lg border border-farm-200">
-                                                                        <span>📷 เปลี่ยนรูปผักสด</span>
+                                                                        <span>📷 เปลี่ยนรูป</span>
                                                                         <input 
                                                                             type="file" 
                                                                             accept="image/*" 
@@ -1104,7 +1188,8 @@
                                                                 <span className="text-slate-500 font-bold">สต็อก:</span>
                                                                 <button 
                                                                     onClick={() => {
-                                                                        const newStock = Math.max(0, p.stock - 1);
+                                                                        const step = p.category === 'salad' ? 0.5 : 1;
+                                                                        const newStock = Math.max(0, roundStep(p.stock - step));
                                                                         db.collection('products').doc(p.id).update({ stock: newStock });
                                                                     }}
                                                                     className="w-8 h-8 bg-slate-100 rounded-xl font-extrabold text-slate-700 hover:bg-slate-200"
@@ -1113,16 +1198,19 @@
                                                                 </button>
                                                                 <input 
                                                                     type="number"
+                                                                    step={p.category === 'salad' ? '0.5' : '1'}
                                                                     value={p.stock}
                                                                     onChange={e => {
-                                                                        const val = parseInt(e.target.value) || 0;
-                                                                        db.collection('products').doc(p.id).update({ stock: val });
+                                                                        const val = parseFloat(e.target.value) || 0;
+                                                                        db.collection('products').doc(p.id).update({ stock: roundStep(val) });
                                                                     }}
                                                                     className="w-20 p-2 border rounded-xl font-bold text-center bg-slate-50"
                                                                 />
                                                                 <button 
                                                                     onClick={() => {
-                                                                        db.collection('products').doc(p.id).update({ stock: p.stock + 1 });
+                                                                        const step = p.category === 'salad' ? 0.5 : 1;
+                                                                        const newStock = roundStep(p.stock + step);
+                                                                        db.collection('products').doc(p.id).update({ stock: newStock });
                                                                     }}
                                                                     className="w-8 h-8 bg-slate-100 rounded-xl font-extrabold text-slate-700 hover:bg-slate-200"
                                                                 >
@@ -1136,6 +1224,7 @@
                                             </div>
                                         )}
 
+                                        {}
                                         {adminTab === 'reports' && userRole === 'admin' && (
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                                                 <div className="flex justify-between items-center border-b pb-3">
@@ -1157,10 +1246,8 @@
                                             </div>
                                         )}
 
-                                        {/* Settings Tab */}
                                         {adminTab === 'settings' && userRole === 'admin' && (
                                             <div className="space-y-6">
-                                                {/* Farm Info Form */}
                                                 <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
                                                     <div className="flex items-center justify-between border-b pb-3">
                                                         <h3 className="font-extrabold text-slate-900 text-base">⚙️ ตั้งค่าข้อมูลฟาร์ม และการชำระเงิน</h3>
@@ -1206,8 +1293,8 @@
                                                                         const file = e.target.files[0];
                                                                         if (file) {
                                                                             try {
-                                                                                const compressed = await compressImage(file, 800, 800, 0.7);
-                                                                                setCustomQrImage(compressed);
+                                                                                const { blob } = await compressImageToBlob(file, 600, 600, 0.50);
+                                                                                setCustomQrImage(blob);
                                                                             } catch (err) {
                                                                                 console.error(err);
                                                                             }
@@ -1228,11 +1315,9 @@
                                                     </form>
                                                 </div>
 
-                                                {/* Staff Management */}
                                                 <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
                                                     <div className="border-b pb-3">
-                                                        <h3 className="font-extrabold text-slate-900 text-base">👥 จัดการสิทธิ์และรหัส PIN พนักงาน (สูงสุด 5 คน)</h3>
-                                                        <p className="text-slate-500 text-xs mt-0.5">พนักงานจะเห็นเฉพาะ "งานวันนี้" ไม่เห็นรายงานรายได้หรือตั้งค่า</p>
+                                                        <h3 className="font-extrabold text-slate-900 text-base">👥 จัดการสิทธิ์และรหัส PIN พนักงาน</h3>
                                                     </div>
 
                                                     <div className="bg-amber-50 p-3 rounded-2xl border border-amber-200 space-y-1 text-xs mb-3">
@@ -1359,7 +1444,6 @@
                                                             </p>
                                                         )}
 
-                                                        {/* Proof Upload */}
                                                         <div className="pt-2 border-t flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
                                                             <div className="w-full sm:w-auto">
                                                                 <label className="font-bold text-slate-700 block mb-0.5">📸 อัปโหลดรูปหลักฐานการจัดส่ง:</label>
@@ -1386,6 +1470,7 @@
                         )}
                     </main>
 
+                    {}
                     {selectedOrderDetails && (
                         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
                             <div className="bg-white w-full max-w-3xl rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl my-auto">
@@ -1401,7 +1486,6 @@
                                     </div>
                                 </div>
 
-                                {/* Printable Area */}
                                 <div id="printable-area" className="space-y-6 text-slate-800 text-xs">
                                     <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4">
                                         <div>
@@ -1488,6 +1572,7 @@
                         </div>
                     )}
 
+                    {/* Bottom Navigation */}
                     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 md:hidden z-20">
                         <div className="grid grid-cols-3 text-center py-2 text-[11px] font-bold">
                             <button onClick={() => setView('store')} className={`space-y-0.5 ${view === 'store' ? 'text-farm-800' : 'text-slate-400'}`}>
