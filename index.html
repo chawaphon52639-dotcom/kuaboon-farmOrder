@@ -285,6 +285,7 @@
             const [selectedOrderDetails, setSelectedOrderDetails] = React.useState(null);
             const [showCartDrawer, setShowCartDrawer] = React.useState(false);
             const [cancelModalOrder, setCancelModalOrder] = React.useState(null);
+            const [deleteModalOrder, setDeleteModalOrder] = React.useState(null);
 
             const showToast = (title, message, type = 'info') => {
                 setToastModal({ show: true, title, message, type });
@@ -565,6 +566,37 @@
                 }
             };
 
+            const executeAdminDeleteOrder = async (order) => {
+                if (!order) return;
+                setIsSubmitting(true);
+                try {
+                    const batch = db.batch();
+                    const orderRef = db.collection('orders').doc(order.id);
+                    batch.delete(orderRef);
+
+                    // Revert stock automatically if the order was not previously cancelled
+                    if (order.status !== 'cancelled' && order.items && Array.isArray(order.items)) {
+                        order.items.forEach(item => {
+                            const pRef = db.collection('products').doc(item.id);
+                            const currentProd = products.find(p => p.id === item.id);
+                            if (currentProd) {
+                                const newStock = roundStep((currentProd.stock || 0) + item.qty);
+                                batch.update(pRef, { stock: newStock });
+                            }
+                        });
+                    }
+
+                    await batch.commit();
+                    setDeleteModalOrder(null);
+                    showToast('🗑️ ลบออเดอร์สำเร็จ!', `ลบคำสั่งซื้อเลขที่ ${order.docNo} และคืนผักสดเข้าสต็อกเรียบร้อยแล้ว`, 'success');
+                } catch (err) {
+                    console.error("Admin delete error:", err);
+                    showToast('❌ ลบไม่สำเร็จ', 'เกิดข้อผิดพลาดในการลบออเดอร์ออกจากคลาวด์', 'error');
+                } finally {
+                    setIsSubmitting(false);
+                }
+            };
+
             const handleBackofficeLogin = (e) => {
                 e.preventDefault();
                 if (adminPin === masterAdminPin) {
@@ -756,6 +788,27 @@
                                 <div className="flex gap-2">
                                     <button onClick={() => setCancelModalOrder(null)} className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-200">ไม่ยกเลิก</button>
                                     <button onClick={() => executeCancelOrder(cancelModalOrder)} disabled={isSubmitting} className="flex-1 py-2.5 bg-rose-600 text-white rounded-xl font-bold text-xs hover:bg-rose-700 shadow">{isSubmitting ? '⏳ กำลังยกเลิก...' : '❌ ยืนยันยกเลิก'}</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Admin Delete Order Confirmation Modal */}
+                    {deleteModalOrder && (
+                        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+                            <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl border text-center">
+                                <div className="w-14 h-14 bg-rose-600 text-white rounded-2xl mx-auto flex items-center justify-center text-2xl font-bold shadow-lg">🗑️</div>
+                                <div className="space-y-1">
+                                    <h3 className="font-extrabold text-slate-900 text-base">👑 [ผู้บริหาร] ยืนยันลบออเดอร์ถาวร?</h3>
+                                    <div className="text-slate-600 text-xs bg-rose-50 p-3 rounded-xl border border-rose-200 text-left space-y-1">
+                                        <p>• เลขที่เอกสาร: <strong className="text-rose-900">{deleteModalOrder.docNo}</strong></p>
+                                        <p>• ลูกค้า: คุณ <strong>{deleteModalOrder.customerName}</strong></p>
+                                        <p className="text-emerald-700 font-bold pt-1 border-t border-rose-200">⚡ ระบบจะดึงผักสดทั้งหมดในออเดอร์นี้คืนเข้าคลังสต็อกให้อัตโนมัติครับ</p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button onClick={() => setDeleteModalOrder(null)} className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-200">ยกเลิก / ไม่ลบ</button>
+                                    <button onClick={() => executeAdminDeleteOrder(deleteModalOrder)} disabled={isSubmitting} className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-xs shadow">{isSubmitting ? '⏳ กำลังลบ...' : '🗑️ ยืนยันลบถาวร'}</button>
                                 </div>
                             </div>
                         </div>
@@ -1194,10 +1247,18 @@
                                                                             <p className="text-slate-400 text-[11px]">วันที่สั่ง: {ord.date} | ยอดเงิน: <strong className="text-farm-800">฿{ord.total}</strong></p>
                                                                         </div>
 
-                                                                        <button onClick={() => setSelectedOrderDetails(ord)} className={`px-4 py-2 rounded-xl text-white font-extrabold text-xs shadow flex items-center gap-1.5 whitespace-nowrap self-start sm:self-center ${isDeliveryNote ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-700 hover:bg-emerald-800'}`}>
-                                                                            <span>🖨️</span>
-                                                                            <span>{isDeliveryNote ? 'ออกใบส่งของ (A4)' : 'ออกใบเสร็จรับเงิน (A4)'}</span>
-                                                                        </button>
+                                                                        <div className="flex items-center gap-2 self-start sm:self-center">
+                                                                            <button onClick={() => setSelectedOrderDetails(ord)} className={`px-3.5 py-2 rounded-xl text-white font-extrabold text-xs shadow flex items-center gap-1.5 whitespace-nowrap ${isDeliveryNote ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-700 hover:bg-emerald-800'}`}>
+                                                                                <span>🖨️</span>
+                                                                                <span>{isDeliveryNote ? 'ออกใบส่งของ (A4)' : 'ออกใบเสร็จรับเงิน (A4)'}</span>
+                                                                            </button>
+
+                                                                            {userRole === 'admin' && (
+                                                                                <button onClick={() => setDeleteModalOrder(ord)} className="px-3 py-2 bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 font-extrabold text-xs rounded-xl transition-all whitespace-nowrap">
+                                                                                    🗑️ ลบออเดอร์
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
                                                                     </div>
                                                                 );
                                                             })
@@ -1370,6 +1431,12 @@
                                                                         <span>📄</span>
                                                                         <span>{isDeliveryNote ? 'ออกใบส่งของ (A4)' : 'ออกใบเสร็จรับเงิน (A4)'}</span>
                                                                     </button>
+
+                                                                    {userRole === 'admin' && (
+                                                                        <button onClick={() => setDeleteModalOrder(order)} className="px-3 py-2 bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 font-extrabold text-xs rounded-xl transition-all whitespace-nowrap">
+                                                                            🗑️ ลบออเดอร์
+                                                                        </button>
+                                                                    )}
                                                                 </div>
                                                             </div>
 
