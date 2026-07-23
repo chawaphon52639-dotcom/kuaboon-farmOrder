@@ -24,6 +24,9 @@
     <!-- Canvas Confetti -->
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 
+    <!-- html2pdf.js for Direct PDF Saving -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
     <!-- Firebase SDKs (Compat version) -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
@@ -288,8 +291,6 @@
             ]);
             const [newWholesaleName, setNewWholesaleName] = React.useState('');
             const [newWholesalePhone, setNewWholesalePhone] = React.useState('');
-            const [newStaffName, setNewStaffName] = React.useState('');
-            const [newStaffPin, setNewStaffPin] = React.useState('');
 
             // Modals State
             const [selectedOrderDetails, setSelectedOrderDetails] = React.useState(null);
@@ -301,15 +302,9 @@
             const isAdminLoggedInRef = React.useRef(isAdminLoggedIn);
             const isInitialOrderLoadRef = React.useRef(true);
 
-            React.useEffect(() => {
-                viewRef.current = view;
-            }, [view]);
+            React.useEffect(() => { viewRef.current = view; }, [view]);
+            React.useEffect(() => { isAdminLoggedInRef.current = isAdminLoggedIn; }, [isAdminLoggedIn]);
 
-            React.useEffect(() => {
-                isAdminLoggedInRef.current = isAdminLoggedIn;
-            }, [isAdminLoggedIn]);
-
-            // Loud Audio alert player
             const playLoudAlert = () => {
                 try {
                     const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -323,7 +318,6 @@
                     }
 
                     const now = ctx.currentTime;
-                    // Multi-tone chime sequence
                     const freqs = [523.25, 659.25, 783.99, 1046.50, 659.25, 1046.50];
                     freqs.forEach((freq, idx) => {
                         const osc = ctx.createOscillator();
@@ -344,7 +338,6 @@
                 }
             };
 
-            // Auto-unlock Web Audio on first user interaction anywhere
             React.useEffect(() => {
                 const handleUnlockAudio = () => {
                     if (!audioCtxRef.current) {
@@ -400,7 +393,6 @@
                     setIsFirebaseConnected(true);
                     const ords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     
-                    // Sound alert ONLY in backoffice for logged-in Admin/Staff
                     if (isInitialOrderLoadRef.current) {
                         isInitialOrderLoadRef.current = false;
                     } else {
@@ -861,7 +853,7 @@
                                 </div>
                                 <div>
                                     <h1 className="font-extrabold text-slate-900 text-base sm:text-lg leading-tight">{farmName}</h1>
-                                    <p className="text-[11px] text-slate-500 font-medium">ผักปลอดสารสดจากแปลง ปลูกด้วยความใส่ใจ</p>
+                                    <p className="text-[11px] text-slate-500 font-medium">ผักสดส่งตรงจากฟาร์มทุกวัน • ✨ พัฒนา Webapp โดย @น้ารามเกื้อบุญ</p>
                                 </div>
                             </div>
 
@@ -937,17 +929,21 @@
                         </div>
                     )}
 
-                    {}
                     <main className="max-w-6xl mx-auto px-4 pt-4">
                         {view === 'store' && (
                             <div className="space-y-6">
                                 {/* Top Banner */}
                                 <div className="bg-gradient-to-r from-farm-800 to-emerald-600 text-white p-6 rounded-3xl shadow-lg relative overflow-hidden">
                                     <div className="relative z-10 space-y-2 max-w-xl">
-                                        <span className="bg-white/20 text-white text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider backdrop-blur-md">
-                                            🌿 ผักสลัดสด ปลอดสารพิษ 100%
-                                        </span>
-                                        <h2 className="text-2xl sm:text-3xl font-extrabold leading-tight">สด กรอบ ส่งตรงจากแปลงทุกวัน</h2>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <span className="bg-white/20 text-white text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider backdrop-blur-md">
+                                                🌿 ผักสลัดสด ปลอดสารพิษ 100%
+                                            </span>
+                                            <span className="bg-amber-400 text-farm-900 text-[10px] font-black px-3 py-1 rounded-full shadow-sm">
+                                                ✨ พัฒนา Webapp โดย @น้ารามเกื้อบุญ
+                                            </span>
+                                        </div>
+                                        <h2 className="text-2xl sm:text-3xl font-extrabold leading-tight">สดใหม่กรอบอร่อย ส่งตรงจากฟาร์มทุกวัน</h2>
                                         <p className="text-emerald-100 text-xs sm:text-sm">
                                             สั่งผักรวมครบ 5 กก. ขึ้นไป ปรับราคาส่ง 100.-/กก. ให้อัตโนมัติ (เลือกสั่งขั้นละ 0.5 กก. ได้)
                                         </p>
@@ -1102,7 +1098,6 @@
                             </div>
                         )}
 
-                        {/* Cart Floating Button & Cart Drawer */}
                         {cart.length > 0 && view === 'store' && (
                             <div className="fixed bottom-16 sm:bottom-6 right-4 left-4 max-w-md mx-auto z-30">
                                 <button 
@@ -1290,7 +1285,6 @@
                             </div>
                         )}
 
-                        {}
                         {view === 'tracking' && (
                             <div className="space-y-4 max-w-3xl mx-auto">
                                 <h2 className="font-extrabold text-slate-900 text-lg">🚚 ติดตามสถานะออเดอร์จัดส่ง</h2>
@@ -1392,7 +1386,6 @@
                             </div>
                         )}
 
-                        {}
                         {view === 'backoffice' && (
                             <div className="space-y-6">
                                 {!isAdminLoggedIn ? (
@@ -1486,7 +1479,7 @@
                                             )}
                                         </div>
 
-                                        {}
+                                        {/* Backoffice Sub-tab: Inventory */}
                                         {adminTab === 'inventory' && userRole === 'admin' && (
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                                                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-3">
@@ -1555,7 +1548,7 @@
                                             </div>
                                         )}
 
-                                        {}
+                                        {/* Backoffice Sub-tab: Reports */}
                                         {adminTab === 'reports' && userRole === 'admin' && (
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                                                 <div className="flex justify-between items-center border-b pb-3">
@@ -1626,7 +1619,7 @@
                                             </div>
                                         )}
 
-                                        {}
+                                        {/* Backoffice Sub-tab: Settings */}
                                         {adminTab === 'settings' && userRole === 'admin' && (
                                             <div className="space-y-6">
                                                 {/* Wholesale Whitelist Card */}
@@ -1832,7 +1825,7 @@
                                             </div>
                                         )}
 
-                                        {}
+                                        {/* Backoffice Sub-tab: Orders Active / Completed */}
                                         {(adminTab === 'active' || adminTab === 'completed') && (
                                             <div className="space-y-4">
                                                 {orders.filter(o => adminTab === 'completed' ? o.status === 'completed' : (o.status !== 'completed' && o.status !== 'cancelled')).map(order => (
@@ -1927,15 +1920,37 @@
                         )}
                     </main>
 
-                    {}
                     {selectedOrderDetails && (
                         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
                             <div className="bg-white w-full max-w-3xl rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl my-auto">
                                 <div className="flex justify-between items-center no-print border-b pb-3">
                                     <h3 className="font-extrabold text-slate-900 text-base">📄 ตัวอย่างเอกสาร A4</h3>
-                                    <div className="flex gap-2">
-                                        <button onClick={() => window.print()} className="px-4 py-2 bg-farm-800 text-white font-bold text-xs rounded-xl shadow">
-                                            🖨️ พิมพ์ / บันทึก PDF
+                                    <div className="flex flex-wrap gap-2">
+                                        <button 
+                                            onClick={() => {
+                                                const element = document.getElementById('printable-area');
+                                                if (!element) return;
+                                                if (window.html2pdf) {
+                                                    const opt = {
+                                                        margin:       [10, 10, 10, 10],
+                                                        filename:     `${selectedOrderDetails.docNo.replace(/[\/\\]/g, '_')}.pdf`,
+                                                        image:        { type: 'jpeg', quality: 0.98 },
+                                                        html2canvas:  { scale: 2, useCORS: true },
+                                                        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                                                    };
+                                                    window.html2pdf().set(opt).from(element).save();
+                                                } else {
+                                                    window.print();
+                                                }
+                                            }} 
+                                            className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow flex items-center gap-1.5 transition-all"
+                                        >
+                                            <span>📥</span>
+                                            <span>บันทึกไฟล์ PDF</span>
+                                        </button>
+                                        <button onClick={() => window.print()} className="px-4 py-2 bg-farm-800 hover:bg-farm-900 text-white font-bold text-xs rounded-xl shadow flex items-center gap-1.5 transition-all">
+                                            <span>🖨️</span>
+                                            <span>สั่งพิมพ์ (Print)</span>
                                         </button>
                                         <button onClick={() => setSelectedOrderDetails(null)} className="px-3 py-2 bg-slate-200 text-slate-700 font-bold text-xs rounded-xl hover:bg-slate-300">
                                             ปิด
@@ -2026,6 +2041,12 @@
                                                         <span className="text-[10px] text-slate-400 font-normal">วันที่ ...../...../..........</span>
                                                     </p>
                                                 </div>
+                                            </div>
+
+                                            {/* Note specifying physical document with shipment */}
+                                            <div className="mt-6 p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-amber-900 text-[11px] font-medium flex items-center gap-2">
+                                                <span className="text-base">📌</span>
+                                                <span><strong>หมายเหตุ:</strong> เอกสารฉบับนี้เป็นเอกสารอิเล็กทรอนิกส์ เอกสารฉบับจริงจะถูกจัดส่งไปพร้อมกับสินค้า</span>
                                             </div>
                                         </div>
                                     );
