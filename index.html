@@ -725,6 +725,12 @@
             };
 
             const updateOrderStatus = async (orderId, newStatus) => {
+                const targetOrder = orders.find(o => o.id === orderId);
+                if (newStatus === 'completed' && targetOrder && !targetOrder.proofImage) {
+                    showToast('⚠️ ต้องแนบรูปหลักฐานก่อน', 'กรุณาอัปโหลดรูปถ่ายหลักฐานการจัดส่งก่อนเปลี่ยนสถานะเป็น "ส่งสำเร็จแล้ว" ครับ', 'error');
+                    return;
+                }
+
                 try {
                     if (isFirebaseConnected) {
                         await db.collection('orders').doc(orderId).update({ status: newStatus });
@@ -995,7 +1001,7 @@
                                 <button 
                                     type="button"
                                     onClick={() => showToast(
-                                        isFirebaseConnected ? '🟢 ระบบเชื่อมต่อแล้ว' : '🔴 ยังไม่พบการเชื่อมต่อ ',
+                                        isFirebaseConnected ? '🟢 เชื่อมต่อคลาวด์ Firebase แล้ว' : '🔴 ยังไม่พบการเชื่อมต่อ Firestore',
                                         isFirebaseConnected 
                                             ? 'ระบบเชื่อมต่อโปรเจกต์ orderkueaboon สำเร็จเรียบร้อย ออเดอร์และสต็อกจะซิงค์สดๆ ทันที' 
                                             : 'วิธีแก้ไข:\n1. เข้า console.firebase.google.com เลือก orderkueaboon\n2. ไปที่ Firestore Database แล้วกด "Create database"\n3. ไปที่แท็บ Rules ตั้งค่า allow read, write: if true;',
@@ -1080,7 +1086,7 @@
                                                 🌿 ผักสลัดสด ปลอดสารพิษ 100%
                                             </span>
                                             <span className="bg-amber-400 text-farm-900 text-[10px] font-black px-3 py-1 rounded-full shadow-sm">
-                                                ✨ พัฒนาระบบโดย @น้ารามเกื้อบุญ
+                                                ✨ พัฒนา Webapp โดย @น้ารามเกื้อบุญ
                                             </span>
                                         </div>
                                         <h2 className="text-2xl sm:text-3xl font-extrabold leading-tight">สดใหม่กรอบอร่อย ส่งตรงจากฟาร์มทุกวัน</h2>
