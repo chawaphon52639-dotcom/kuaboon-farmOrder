@@ -334,32 +334,15 @@
 
             const playLoudAlert = () => {
                 try {
-                    const AudioContext = window.AudioContext || window.webkitAudioContext;
-                    if (!AudioContext) return;
-                    if (!audioCtxRef.current) {
-                        audioCtxRef.current = new AudioContext();
+                    // เล่นเฉพาะเสียงพูดเตือนภาษาไทยเมื่อมีออเดอร์ใหม่เข้า
+                    if ('speechSynthesis' in window) {
+                        window.speechSynthesis.cancel();
+                        const utterance = new SpeechSynthesisUtterance('มีออเดอร์ใหม่เข้าแล้วครับ');
+                        utterance.lang = 'th-TH';
+                        utterance.rate = 1.0;
+                        utterance.pitch = 1.0;
+                        window.speechSynthesis.speak(utterance);
                     }
-                    const ctx = audioCtxRef.current;
-                    if (ctx.state === 'suspended') {
-                        ctx.resume();
-                    }
-
-                    const now = ctx.currentTime;
-                    const freqs = [523.25, 659.25, 783.99, 1046.50, 659.25, 1046.50];
-                    freqs.forEach((freq, idx) => {
-                        const osc = ctx.createOscillator();
-                        const gain = ctx.createGain();
-                        osc.type = 'sine';
-                        osc.frequency.setValueAtTime(freq, now + idx * 0.15);
-                        gain.gain.setValueAtTime(0.5, now + idx * 0.15);
-                        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.15 + 0.35);
-                        
-                        osc.connect(gain);
-                        gain.connect(ctx.destination);
-                        
-                        osc.start(now + idx * 0.15);
-                        osc.stop(now + idx * 0.15 + 0.35);
-                    });
                 } catch (err) {
                     console.warn("Audio play alert error:", err);
                 }
