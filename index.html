@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>เกื้อบุญฟาร์ม - ระบบสั่งผักสดและบริหารจัดการคลาวด์ (Kuaboon Master v1.0)</title>
+    <title>เกื้อบุญฟาร์ม - ระบบสั่งผักสดและบริหารจัดการคลาวด์ (Kuaboon Master v1.1)</title>
     
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -735,7 +735,7 @@
                         setAdminPin('');
                         showToast('👷 เข้าสู่ระบบพนักงาน', `ยินดีต้อนรับคุณ ${foundStaff.name}`, 'success');
                     } else {
-                        showToast('🔑 รหัส PIN ไม่ถูกต้อง', 'กรุณาตรวจสอบรหัส PIN 4 หลัก (Admin PIN: 1234)', 'error');
+                        showToast('🔑 รหัส PIN ไม่ถูกต้อง', 'กรุณาตรวจสอบรหัส PIN 4 หลักอีกครั้ง', 'error');
                     }
                 }
             };
@@ -1048,14 +1048,13 @@
                                         onClick={() => setView('backoffice')}
                                         className={`px-4 py-2 rounded-2xl font-bold text-xs transition-all ${view === 'backoffice' ? 'bg-farm-800 text-white shadow-md shadow-farm-800/30' : 'text-slate-600 hover:bg-slate-100'}`}
                                     >
-                                        👤🔧 หลังบ้าน / ปฏิบัติการ
+                                        👤🔧 ระบบปฏิบัติการ
                                     </button>
                                 </div>
                             </div>
                         </div>
                     </header>
 
-                    {/* LINE In-App Browser Warning Banner */}
                     {/LINE/i.test(navigator.userAgent) && (
                         <div className="bg-amber-500 text-slate-900 px-4 py-2 text-xs font-bold text-center border-b border-amber-600 shadow-inner flex items-center justify-center gap-2">
                             <span className="text-base">📱</span>
@@ -1063,7 +1062,6 @@
                         </div>
                     )}
 
-                    {/* Notification Toast Modal */}
                     {toastModal.show && (
                         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
                             <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl border text-center">
@@ -1088,10 +1086,8 @@
                     )}
 
                     <main className="max-w-6xl mx-auto px-4 pt-4">
-                        {}
                         {view === 'store' && (
                             <div className="space-y-6">
-                                {/* Top Banner */}
                                 <div className="bg-gradient-to-r from-farm-800 to-emerald-600 text-white p-6 rounded-3xl shadow-lg relative overflow-hidden">
                                     <div className="relative z-10 space-y-2 max-w-xl">
                                         <div className="flex flex-wrap items-center gap-2">
@@ -1110,7 +1106,6 @@
                                     <div className="absolute -right-6 -bottom-10 opacity-20 text-9xl">🥗</div>
                                 </div>
 
-                                {/* Customer Tier Picker */}
                                 <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
                                     <div>
                                         <h3 className="font-extrabold text-slate-900 text-sm">👤 เลือกระดับประเภทลูกค้า:</h3>
@@ -1142,7 +1137,6 @@
                                     </div>
                                 </div>
 
-                                {/* Category Tabs */}
                                 <div className="flex border-b border-slate-200 gap-2 overflow-x-auto hide-scrollbar">
                                     <button 
                                         onClick={() => setSelectedCategory('all')}
@@ -1164,7 +1158,6 @@
                                     </button>
                                 </div>
 
-                                {/* Products Grid */}
                                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
                                     {products
                                         .filter(p => selectedCategory === 'all' || p.category === selectedCategory)
@@ -1265,7 +1258,6 @@
                             </div>
                         )}
 
-                        {/* Floating Cart Button */}
                         {cart.length > 0 && view === 'store' && (
                             <div className="fixed bottom-16 sm:bottom-6 right-4 left-4 max-w-md mx-auto z-30">
                                 <button 
@@ -1288,7 +1280,7 @@
                             </div>
                         )}
 
-                        {}
+                        {/* Cart Drawer */}
                         {showCartDrawer && (
                             <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex justify-end">
                                 <div className="bg-white w-full max-w-lg h-full overflow-y-auto p-5 space-y-6 flex flex-col justify-between">
@@ -1450,7 +1442,6 @@
                             </div>
                         )}
 
-                        {}
                         {view === 'tracking' && (
                             <div className="space-y-4 max-w-3xl mx-auto">
                                 <h2 className="font-extrabold text-slate-900 text-lg">🚚 ติดตามสถานะออเดอร์จัดส่ง</h2>
@@ -1548,7 +1539,6 @@
                             </div>
                         )}
 
-                        {}
                         {view === 'backoffice' && (
                             <div className="space-y-6">
                                 {!isAdminLoggedIn ? (
@@ -1557,8 +1547,8 @@
                                             🔒
                                         </div>
                                         <div>
-                                            <h2 className="font-extrabold text-slate-900 text-lg">เข้าสู่ระบบหลังบ้าน</h2>
-                                            <p className="text-slate-500 text-xs">กรอกรหัส PIN 4 หลัก (Admin: 1234 หรือ PIN พนักงาน)</p>
+                                            <h2 className="font-extrabold text-slate-900 text-lg">เข้าสู่ระบบสำหรับ Admin/พนักงาน</h2>
+                                            <p className="text-slate-500 text-xs">กรอกรหัส PIN 4 หลัก</p>
                                         </div>
 
                                         <form onSubmit={handleBackofficeLogin} className="space-y-4">
@@ -1578,7 +1568,6 @@
                                     </div>
                                 ) : (
                                     <div className="space-y-5">
-                                        {/* Backoffice Header */}
                                         <div className="bg-slate-900 text-white p-4 rounded-3xl flex flex-wrap items-center justify-between gap-3">
                                             <div>
                                                 <span className="bg-farm-500 text-white text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase">
@@ -1603,7 +1592,6 @@
                                             </div>
                                         </div>
 
-                                        {/* Backoffice Navigation Tabs */}
                                         <div className="flex border-b border-slate-200 gap-2 overflow-x-auto hide-scrollbar">
                                             <button 
                                                 onClick={() => setAdminTab('active')}
@@ -1642,7 +1630,6 @@
                                             )}
                                         </div>
 
-                                        {/* Backoffice Sub-tab: Inventory */}
                                         {adminTab === 'inventory' && userRole === 'admin' && (
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                                                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-3">
@@ -1745,7 +1732,6 @@
                                             </div>
                                         )}
 
-                                        {/* Backoffice Sub-tab: Reports */}
                                         {adminTab === 'reports' && userRole === 'admin' && (
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                                                 <div className="flex justify-between items-center border-b pb-3">
@@ -1816,14 +1802,12 @@
                                             </div>
                                         )}
 
-                                        {/* Backoffice Sub-tab: Settings */}
                                         {adminTab === 'settings' && userRole === 'admin' && (
                                             <div className="space-y-6">
-                                                {/* Staff Management Card */}
                                                 <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
                                                     <div className="border-b pb-3">
                                                         <h3 className="font-extrabold text-slate-900 text-base">👷 จัดการบัญชีผู้ใช้งานพนักงาน & รหัส PIN เข้าระบบ</h3>
-                                                        <p className="text-slate-500 text-xs">พนักงานสามารถใช้ PIN 4 หลักของตนเอง ล็อกอินเข้าใช้งานระบบหลังบ้านเพื่อเตรียมผักและจัดส่งได้ (Admin PIN ปัจจุบัน: <span className="font-mono font-bold text-farm-800">{masterAdminPin}</span>)</p>
+                                                        <p className="text-slate-500 text-xs">พนักงานสามารถใช้ PIN 4 หลักของตนเอง ล็อกอินเข้าใช้งานระบบปฏิบัติการเพื่อเตรียมผักและจัดส่งได้ (Admin PIN ปัจจุบัน: <span className="font-mono font-bold text-farm-800">{masterAdminPin}</span>)</p>
                                                     </div>
 
                                                     <form onSubmit={handleAddStaff} className="flex flex-col sm:flex-row items-center gap-2 bg-blue-50/60 p-3 rounded-2xl border border-blue-100 text-xs">
@@ -1875,7 +1859,6 @@
                                                     </div>
                                                 </div>
 
-                                                {/* Wholesale Whitelist Card */}
                                                 <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
                                                     <div className="border-b pb-3">
                                                         <h3 className="font-extrabold text-slate-900 text-base">🏪 จัดการรายชื่อลูกค้าราคาพิเศษ / ร้านอาหาร / Shop</h3>
@@ -1964,7 +1947,6 @@
                                                     </div>
                                                 </div>
 
-                                                {/* Farm Details Form Card */}
                                                 <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
                                                     <div className="border-b pb-3">
                                                         <h3 className="font-extrabold text-slate-900 text-base">🏡 ตั้งค่าข้อมูลเกื้อบุญฟาร์ม & การชำระเงิน</h3>
@@ -2078,7 +2060,6 @@
                                             </div>
                                         )}
 
-                                        {/* Backoffice Sub-tab: Orders Active / Completed */}
                                         {(adminTab === 'active' || adminTab === 'completed') && (
                                             <div className="space-y-4">
                                                 {orders.filter(o => adminTab === 'completed' ? o.status === 'completed' : (o.status !== 'completed' && o.status !== 'cancelled')).map(order => (
@@ -2173,7 +2154,7 @@
                         )}
                     </main>
 
-                    {}
+                    {/* Document Preview Modal */}
                     {selectedOrderDetails && (
                         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
                             <div className="bg-white w-full max-w-3xl rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl my-auto">
@@ -2323,7 +2304,7 @@
                         </div>
                     )}
 
-                    {}
+                    {/* Product Edit Modal */}
                     {editingProductModal && (
                         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
                             <div className="bg-white rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl border my-auto">
@@ -2461,7 +2442,6 @@
                         </div>
                     )}
 
-                    {}
                     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 md:hidden z-20">
                         <div className="grid grid-cols-3 text-center py-2 text-[11px] font-bold">
                             <button onClick={() => setView('store')} className={`space-y-0.5 ${view === 'store' ? 'text-farm-800 font-extrabold' : 'text-slate-400'}`}>
@@ -2474,7 +2454,7 @@
                             </button>
                             <button onClick={() => setView('backoffice')} className={`space-y-0.5 ${view === 'backoffice' ? 'text-farm-800 font-extrabold' : 'text-slate-400'}`}>
                                 <div className="text-base">👤🔧</div>
-                                <span>ปฏิบัติการ</span>
+                                <span>ระบบปฏิบัติการ</span>
                             </button>
                         </div>
                     </nav>
