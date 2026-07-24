@@ -334,7 +334,6 @@
 
             const playLoudAlert = () => {
                 try {
-                    // เล่นเฉพาะเสียงพูดเตือนภาษาไทยเมื่อมีออเดอร์ใหม่เข้า
                     if ('speechSynthesis' in window) {
                         window.speechSynthesis.cancel();
                         const utterance = new SpeechSynthesisUtterance('มีออเดอร์ใหม่เข้าแล้วครับ');
@@ -1069,6 +1068,7 @@
                     )}
 
                     <main className="max-w-6xl mx-auto px-4 pt-4">
+                        {}
                         {view === 'store' && (
                             <div className="space-y-6">
                                 <div className="bg-gradient-to-r from-farm-800 to-emerald-600 text-white p-6 rounded-3xl shadow-lg relative overflow-hidden">
@@ -1241,6 +1241,7 @@
                             </div>
                         )}
 
+                        {}
                         {cart.length > 0 && view === 'store' && (
                             <div className="fixed bottom-16 sm:bottom-6 right-4 left-4 max-w-md mx-auto z-30">
                                 <button 
@@ -1263,7 +1264,6 @@
                             </div>
                         )}
 
-                        {/* Cart Drawer */}
                         {showCartDrawer && (
                             <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex justify-end">
                                 <div className="bg-white w-full max-w-lg h-full overflow-y-auto p-5 space-y-6 flex flex-col justify-between">
@@ -1425,6 +1425,7 @@
                             </div>
                         )}
 
+                        {}
                         {view === 'tracking' && (
                             <div className="space-y-4 max-w-3xl mx-auto">
                                 <h2 className="font-extrabold text-slate-900 text-lg">🚚 ติดตามสถานะออเดอร์จัดส่ง</h2>
@@ -1522,6 +1523,7 @@
                             </div>
                         )}
 
+                        {}
                         {view === 'backoffice' && (
                             <div className="space-y-6">
                                 {!isAdminLoggedIn ? (
@@ -1605,7 +1607,7 @@
                                                     </button>
                                                     <button 
                                                         onClick={() => setAdminTab('settings')}
-                                                        className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${adminTab === 'settings' ? 'border-farm-800 text-farm-800' : 'border-transparent text-slate-500'}`}
+                                                        className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${adminTab === 'settings' ? 'border-transparent text-slate-500' : 'border-transparent text-slate-500'}`}
                                                     >
                                                         ⚙️ ตั้งค่าฟาร์ม & ร้านค้า
                                                     </button>
@@ -1613,6 +1615,7 @@
                                             )}
                                         </div>
 
+                                        {}
                                         {adminTab === 'inventory' && userRole === 'admin' && (
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                                                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-3">
@@ -1715,6 +1718,7 @@
                                             </div>
                                         )}
 
+                                        {}
                                         {adminTab === 'reports' && userRole === 'admin' && (
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                                                 <div className="flex justify-between items-center border-b pb-3">
@@ -1785,6 +1789,7 @@
                                             </div>
                                         )}
 
+                                        {}
                                         {adminTab === 'settings' && userRole === 'admin' && (
                                             <div className="space-y-6">
                                                 <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
@@ -2043,6 +2048,7 @@
                                             </div>
                                         )}
 
+                                        {}
                                         {(adminTab === 'active' || adminTab === 'completed') && (
                                             <div className="space-y-4">
                                                 {orders.filter(o => adminTab === 'completed' ? o.status === 'completed' : (o.status !== 'completed' && o.status !== 'cancelled')).map(order => (
@@ -2137,7 +2143,7 @@
                         )}
                     </main>
 
-                    {/* Document Preview Modal */}
+                    {}
                     {selectedOrderDetails && (
                         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
                             <div className="bg-white w-full max-w-3xl rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl my-auto">
@@ -2287,7 +2293,7 @@
                         </div>
                     )}
 
-                    {/* Product Edit Modal */}
+                    {}
                     {editingProductModal && (
                         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
                             <div className="bg-white rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl border my-auto">
@@ -2425,6 +2431,7 @@
                         </div>
                     )}
 
+                    {}
                     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 md:hidden z-20">
                         <div className="grid grid-cols-3 text-center py-2 text-[11px] font-bold">
                             <button onClick={() => setView('store')} className={`space-y-0.5 ${view === 'store' ? 'text-farm-800 font-extrabold' : 'text-slate-400'}`}>
