@@ -336,11 +336,13 @@
                 try {
                     if ('speechSynthesis' in window) {
                         window.speechSynthesis.cancel();
-                        const utterance = new SpeechSynthesisUtterance('มีออเดอร์ใหม่เข้าแล้วครับ');
-                        utterance.lang = 'th-TH';
-                        utterance.rate = 1.0;
-                        utterance.pitch = 1.0;
-                        window.speechSynthesis.speak(utterance);
+                        for (let i = 0; i < 3; i++) {
+                            const utterance = new SpeechSynthesisUtterance('มีออเดอร์ใหม่เข้าแล้วครับ');
+                            utterance.lang = 'th-TH';
+                            utterance.rate = 1.0;
+                            utterance.pitch = 1.0;
+                            window.speechSynthesis.speak(utterance);
+                        }
                     }
                 } catch (err) {
                     console.warn("Audio play alert error:", err);
@@ -1264,6 +1266,7 @@
                             </div>
                         )}
 
+                        {}
                         {showCartDrawer && (
                             <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex justify-end">
                                 <div className="bg-white w-full max-w-lg h-full overflow-y-auto p-5 space-y-6 flex flex-col justify-between">
@@ -1607,7 +1610,7 @@
                                                     </button>
                                                     <button 
                                                         onClick={() => setAdminTab('settings')}
-                                                        className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${adminTab === 'settings' ? 'border-transparent text-slate-500' : 'border-transparent text-slate-500'}`}
+                                                        className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${adminTab === 'settings' ? 'border-farm-800 text-farm-800' : 'border-transparent text-slate-500'}`}
                                                     >
                                                         ⚙️ ตั้งค่าฟาร์ม & ร้านค้า
                                                     </button>
@@ -2048,7 +2051,6 @@
                                             </div>
                                         )}
 
-                                        {}
                                         {(adminTab === 'active' || adminTab === 'completed') && (
                                             <div className="space-y-4">
                                                 {orders.filter(o => adminTab === 'completed' ? o.status === 'completed' : (o.status !== 'completed' && o.status !== 'cancelled')).map(order => (
