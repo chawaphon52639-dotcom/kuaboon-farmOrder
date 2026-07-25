@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>เกื้อบุญฟาร์ม - ระบบสั่งผักสดและบริหารจัดการคลาวด์ (Kuaboon Master v1.1)</title>
+    <title>เกื้อบุญฟาร์ม - ระบบสั่งผักสดและบริหารจัดการคลาวด์ (Kuaboon Master v1.2)</title>
     
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -1416,12 +1416,12 @@
                                 </div>
                             </div>
                         )}
-                        {/* Floating Cart Button */}
+
                         {cart.length > 0 && view === 'store' && (
                             <div className="fixed bottom-16 sm:bottom-6 right-4 left-4 max-w-md mx-auto z-30 space-y-1.5">
-                                <div className="bg-emerald-600 text-white px-3 py-1.5 rounded-2xl text-[11px] font-black text-center shadow-lg border border-emerald-500 animate-pulse flex items-center justify-center gap-1.5">
-                                    <span>💡</span>
-                                    <span>โปรดเลือกสินค้าลงตะกร้าให้ครบถ้วน ก่อนกดสั่งซื้อนะครับ</span>
+                                <div className="bg-slate-900 text-white px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-black text-center shadow-2xl border-2 border-emerald-500 animate-pulse flex items-center justify-center gap-1.5">
+                                    <span className="text-base">💡</span>
+                                    <span>" โปรดเลือกสินค้าลงตะกร้าให้ครบถ้วน ก่อนกดสั่งซื้อนะครับ "</span>
                                 </div>
                                 <button 
                                     onClick={() => setShowCartDrawer(true)}
@@ -1815,7 +1815,7 @@
                                                     </button>
                                                     <button 
                                                         onClick={() => setAdminTab('settings')}
-                                                        className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${adminTab === 'settings' ? 'border-farm-800 text-farm-800' : 'border-transparent text-slate-500'}`}
+                                                        className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${adminTab === 'settings' ? 'border-transparent text-slate-500' : 'border-transparent text-slate-500'}`}
                                                     >
                                                         ⚙️ ตั้งค่าฟาร์ม & ร้านค้า
                                                     </button>
