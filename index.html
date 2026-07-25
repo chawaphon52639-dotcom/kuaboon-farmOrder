@@ -254,6 +254,7 @@
             const [products, setProducts] = React.useState(INITIAL_PRODUCTS);
             const [cart, setCart] = React.useState([]);
             const [customerType, setCustomerType] = React.useState('retail');
+            const [showRetailNoticeModal, setShowRetailNoticeModal] = React.useState(true);
             const [selectedCategory, setSelectedCategory] = React.useState('all');
             const [orders, setOrders] = React.useState([]);
             const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -263,6 +264,7 @@
             const [custName, setCustName] = React.useState('');
             const [custPhone, setCustPhone] = React.useState('');
             const [custAddress, setCustAddress] = React.useState('');
+            const [custPickupTime, setCustPickupTime] = React.useState('');
             const [custMapsUrl, setCustMapsUrl] = React.useState('');
             const [isCreditOrder, setIsCreditOrder] = React.useState(false);
             const [slipPreview, setSlipPreview] = React.useState('');
@@ -332,6 +334,7 @@
             React.useEffect(() => { viewRef.current = view; }, [view]);
             React.useEffect(() => { isAdminLoggedInRef.current = isAdminLoggedIn; }, [isAdminLoggedIn]);
 
+            // Speech Synthesis Alert (Repeats 3 times)
             const playLoudAlert = () => {
                 try {
                     if ('speechSynthesis' in window) {
@@ -568,6 +571,7 @@
                         customerName: custName,
                         phone: custPhone,
                         address: custAddress,
+                        pickupTime: custPickupTime,
                         mapsUrl: custMapsUrl,
                         paymentType: isCreditOrder ? 'credit' : 'promptpay',
                         isCredit: isCreditOrder,
@@ -605,6 +609,7 @@
                     setCustName('');
                     setCustPhone('');
                     setCustAddress('');
+                    setCustPickupTime('');
                     setCustMapsUrl('');
                     setCart([]);
                     setShowCartDrawer(false);
@@ -724,6 +729,7 @@
                 }
             };
 
+            // Order status update logic with proof photo lock requirement
             const updateOrderStatus = async (orderId, newStatus) => {
                 const targetOrder = orders.find(o => o.id === orderId);
                 if (newStatus === 'completed' && targetOrder && !targetOrder.proofImage) {
@@ -993,7 +999,7 @@
                                 </div>
                                 <div>
                                     <h1 className="font-extrabold text-slate-900 text-base sm:text-lg leading-tight">{farmName}</h1>
-                                    <p className="text-[11px] text-slate-500 font-medium">ผักสดส่งตรงจากฟาร์มทุกวัน • ✨ พัฒนา Webapp โดย @น้ารามเกื้อบุญ</p>
+                                    <p className="text-[11px] text-slate-500 font-medium">ผักสดส่งตรงจากฟาร์มทุกวัน • ✨ พัฒนาระบบ โดย @น้ารามเกื้อบุญ</p>
                                 </div>
                             </div>
 
@@ -1075,8 +1081,52 @@
                         </div>
                     )}
 
+                    {/* Pop-up Notice for Retail Customer Tier */}
+                    {showRetailNoticeModal && view === 'store' && customerType === 'retail' && (
+                        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+                            <div className="bg-white text-slate-900 rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl border-2 border-emerald-500 text-center">
+                                <div className="w-16 h-16 bg-emerald-100 text-emerald-800 rounded-2xl mx-auto flex items-center justify-center text-3xl font-extrabold shadow-sm">
+                                    🛵
+                                </div>
+                                <div className="space-y-3">
+                                    <h3 className="font-black text-emerald-950 text-xl sm:text-2xl leading-tight">📍 ประกาศเขตพื้นที่และรอบจัดส่งผักสด</h3>
+                                    
+                                    {/* Consolidated notice box */}
+                                    <div className="bg-emerald-50/90 p-4 sm:p-5 rounded-2xl text-left border-2 border-emerald-200 shadow-sm space-y-3 font-bold text-slate-800">
+                                        <p className="text-emerald-950 font-black text-base sm:text-lg border-b border-emerald-200 pb-2 flex items-center gap-2">
+                                            <span>🛵</span> <span>เงื่อนไขการจัดส่งสำหรับลูกค้าทั่วไป:</span>
+                                        </p>
+                                        
+                                        <div className="space-y-1.5 text-sm sm:text-base leading-relaxed text-slate-900">
+                                            <p>• ส่งในเขต <strong>เทศบาลเมืองกาฬสินธุ์เท่านั้น</strong></p>
+                                            <p>• นัดสถานที่รับได้ <strong>[ในเขต เทศบาลเมืองกาฬสินธุ์]</strong></p>
+                                            <p>• หรือหากสะดวก รบกวนมารับที่ฟาร์มครับ 🌿</p>
+                                        </div>
+
+                                        {/* Red text for delivery rounds in the exact same box */}
+                                        <div className="pt-3 border-t-2 border-emerald-200/80 space-y-1.5">
+                                            <p className="text-rose-600 font-black text-sm sm:text-base flex items-center gap-1.5">
+                                                <span>⏰</span> <span>รอบเช้าเริ่มส่ง 10.30 - 12.30 น.</span>
+                                            </p>
+                                            <p className="text-rose-600 font-black text-sm sm:text-base flex items-center gap-1.5">
+                                                <span>⏰</span> <span>รอบบ่ายเริ่มส่ง 14.00 - 15.30 น.</span>
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button 
+                                    type="button"
+                                    onClick={() => setShowRetailNoticeModal(false)}
+                                    className="w-full py-3.5 bg-emerald-800 hover:bg-emerald-900 text-white rounded-2xl font-black text-sm sm:text-base shadow-lg transition-all"
+                                >
+                                    ตกลง / รับทราบ (เข้าเลือกซื้อผักสด)
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Main Content Area */}
                     <main className="max-w-6xl mx-auto px-4 pt-4">
-                        {}
                         {view === 'store' && (
                             <div className="space-y-6">
                                 <div className="bg-gradient-to-r from-farm-800 to-emerald-600 text-white p-6 rounded-3xl shadow-lg relative overflow-hidden">
@@ -1086,7 +1136,7 @@
                                                 🌿 ผักสลัดสด ปลอดสารพิษ 100%
                                             </span>
                                             <span className="bg-amber-400 text-farm-900 text-[10px] font-black px-3 py-1 rounded-full shadow-sm">
-                                                ✨ พัฒนา Webapp โดย @น้ารามเกื้อบุญ
+                                                ✨ พัฒนาระบบ โดย @น้ารามเกื้อบุญ
                                             </span>
                                         </div>
                                         <h2 className="text-2xl sm:text-3xl font-extrabold leading-tight">สดใหม่กรอบอร่อย ส่งตรงจากฟาร์มทุกวัน</h2>
@@ -1105,7 +1155,10 @@
                                     <div className="flex bg-slate-100 p-1.5 rounded-2xl w-full sm:w-auto gap-1">
                                         <button 
                                             type="button"
-                                            onClick={() => setCustomerType('retail')}
+                                            onClick={() => {
+                                                setCustomerType('retail');
+                                                setShowRetailNoticeModal(true);
+                                            }}
                                             className={`flex-1 sm:flex-initial px-5 py-2 rounded-xl text-xs font-extrabold transition-all shadow-sm ${
                                                 customerType === 'retail' 
                                                 ? 'bg-farm-800 text-white shadow-farm-800/30 ring-2 ring-farm-800' 
@@ -1249,7 +1302,7 @@
                             </div>
                         )}
 
-                        {}
+                        {/* Cart Drawer Button */}
                         {cart.length > 0 && view === 'store' && (
                             <div className="fixed bottom-16 sm:bottom-6 right-4 left-4 max-w-md mx-auto z-30">
                                 <button 
@@ -1337,6 +1390,17 @@
                                             </div>
 
                                             <div>
+                                                <label className="font-bold text-slate-700 block mb-1">⏰ ระบุเวลานัดรับผัก (กรณีเดินทางมารับที่ฟาร์มเอง)</label>
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="เช่น 10:30 น. หรือ ช่วงบ่าย 2" 
+                                                    value={custPickupTime}
+                                                    onChange={e => setCustPickupTime(e.target.value)}
+                                                    className="w-full p-2.5 border rounded-xl bg-amber-50/70 border-amber-200 outline-none focus:border-farm-800 font-semibold"
+                                                />
+                                            </div>
+
+                                            <div>
                                                 <div className="flex justify-between items-center mb-1">
                                                     <label className="font-bold text-slate-700">พิกัด GPS / Google Maps Link</label>
                                                     <button type="button" onClick={handleGetGpsLocation} className="text-farm-800 font-bold underline text-[11px]">
@@ -1387,6 +1451,18 @@
                                                             <div className="text-sm text-farm-900 font-extrabold">📌 พร้อมเพย์: <span className="font-black text-base">{promptpayNo}</span></div>
                                                             {bankAccountNo && <div className="text-xs text-slate-800 font-sans font-bold">{bankAccountNo}</div>}
                                                         </div>
+
+                                                        {/* Phone Contact Banner moved here under PromptPay QR scan details */}
+                                                        <div className="bg-emerald-50 border border-emerald-300 p-3 rounded-2xl text-xs sm:text-sm font-bold text-emerald-900 space-y-1 text-left">
+                                                            <p className="font-extrabold text-emerald-950 flex items-center gap-1.5">
+                                                                <span>📞</span> <span>เบอร์ติดต่อสอบถาม/ติดต่อนัดรับ:</span>
+                                                            </p>
+                                                            <p className="font-mono text-emerald-800 font-extrabold text-xs sm:text-sm">
+                                                                • 099-2395756 [อนุชา]<br/>
+                                                                • 091-9251999 [น้าราม]
+                                                            </p>
+                                                        </div>
+
                                                         <div className="space-y-2 pt-2 border-t">
                                                             <label className="font-bold text-slate-700 block text-xs">📸 แนบรูปสลิปโอนเงิน *</label>
                                                             <input 
@@ -1412,8 +1488,9 @@
                                                         </div>
                                                     </div>
                                                 ) : (
-                                                    <div className="bg-amber-50 p-3 rounded-2xl border border-amber-200 text-amber-900 text-[11px]">
-                                                        ⚠️ ระบบสั่งซื้อแบบ "เครดิต" สำหรับร้านค้าหรือร้านอาหารที่ได้รับการอนุมัติเท่านั้น
+                                                    <div className="bg-amber-50 p-3 rounded-2xl border border-amber-200 text-amber-900 text-[11px] space-y-1">
+                                                        <p>⚠️ ระบบสั่งซื้อแบบ "เครดิต" สำหรับร้านค้าหรือร้านอาหารที่ได้รับการอนุมัติเท่านั้น</p>
+                                                        <p className="font-bold">📞 ติดต่ออนุมัติสิทธิ์เครดิต: 099-2395756 [อนุชา], 091-9251999 [น้าราม]</p>
                                                     </div>
                                                 )}
                                             </div>
@@ -1478,6 +1555,7 @@
                                             <div className="text-xs space-y-1">
                                                 <p><strong>ผู้สั่ง:</strong> คุณ {order.customerName} ({order.phone})</p>
                                                 <p><strong>รายการ:</strong> {order.items.map(i => `${i.name} x${i.qty} ${i.unit}`).join(', ')}</p>
+                                                {order.pickupTime && <p className="text-amber-800 font-bold">⏰ <strong>เวลานัดรับผัก:</strong> {order.pickupTime}</p>}
                                                 <p className="font-extrabold text-farm-800">ยอดรวม: ฿{order.total} ({order.isCredit ? 'เครดิตร้านค้า' : 'โอนเงิน/PromptPay'})</p>
                                             </div>
 
@@ -1727,7 +1805,6 @@
                                             </div>
                                         )}
 
-                                        {}
                                         {adminTab === 'reports' && userRole === 'admin' && (
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                                                 <div className="flex justify-between items-center border-b pb-3">
@@ -1798,7 +1875,6 @@
                                             </div>
                                         )}
 
-                                        {}
                                         {adminTab === 'settings' && userRole === 'admin' && (
                                             <div className="space-y-6">
                                                 <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
@@ -2057,6 +2133,7 @@
                                             </div>
                                         )}
 
+                                        {}
                                         {(adminTab === 'active' || adminTab === 'completed') && (
                                             <div className="space-y-4">
                                                 {orders.filter(o => adminTab === 'completed' ? o.status === 'completed' : (o.status !== 'completed' && o.status !== 'cancelled')).map(order => (
@@ -2109,6 +2186,11 @@
                                                                     <span>฿{it.price * it.qty}</span>
                                                                 </div>
                                                             ))}
+                                                            {order.pickupTime && (
+                                                                <p className="text-amber-900 font-bold bg-amber-50 p-1.5 rounded-lg border border-amber-200 mt-1">
+                                                                    ⏰ <strong>เวลานัดรับผักที่ฟาร์ม:</strong> {order.pickupTime}
+                                                                </p>
+                                                            )}
                                                             <div className="flex justify-between font-extrabold text-slate-900 pt-1 border-t">
                                                                 <span>ยอดเงินรวม</span>
                                                                 <span className="text-farm-800">฿{order.total}</span>
@@ -2123,7 +2205,7 @@
 
                                                         <div className="pt-2 border-t flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
                                                             <div className="w-full sm:w-auto">
-                                                                <label className="font-bold text-slate-700 block mb-0.5">📸 อัปโหลดรูปหลักฐานการจัดส่ง:</label>
+                                                                <label className="font-bold text-slate-700 block mb-0.5">📸 อัปโหลดรูปหลักฐานการจัดส่ง (จำเป็นก่อนจบงาน):</label>
                                                                 <input 
                                                                     type="file" 
                                                                     accept="image/*" 
@@ -2228,6 +2310,7 @@
                                                 <p><strong>ชื่อลูกค้า / ร้านค้า:</strong> คุณ {selectedOrderDetails.customerName}</p>
                                                 <p><strong>เบอร์โทรศัพท์:</strong> {selectedOrderDetails.phone}</p>
                                                 <p><strong>ที่อยู่จัดส่ง:</strong> {selectedOrderDetails.address}</p>
+                                                {selectedOrderDetails.pickupTime && <p className="font-bold text-amber-900">⏰ <strong>เวลานัดรับผัก:</strong> {selectedOrderDetails.pickupTime}</p>}
                                             </div>
 
                                             <table className="w-full text-left border-collapse">
@@ -2301,7 +2384,7 @@
                         </div>
                     )}
 
-                    {}
+                    {/* Product Edit Modal */}
                     {editingProductModal && (
                         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
                             <div className="bg-white rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl border my-auto">
@@ -2439,7 +2522,7 @@
                         </div>
                     )}
 
-                    {}
+                    {/* Bottom Mobile Navigation */}
                     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 md:hidden z-20">
                         <div className="grid grid-cols-3 text-center py-2 text-[11px] font-bold">
                             <button onClick={() => setView('store')} className={`space-y-0.5 ${view === 'store' ? 'text-farm-800 font-extrabold' : 'text-slate-400'}`}>
