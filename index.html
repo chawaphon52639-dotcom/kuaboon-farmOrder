@@ -415,10 +415,11 @@
                     const existingIds = new Set(items.map(i => i.id));
                     const missingInitial = INITIAL_PRODUCTS.filter(p => !existingIds.has(p.id));
 
+                    // Only insert truly missing products, NEVER overwrite existing product images
                     if (missingInitial.length > 0) {
                         try {
                             const batch = db.batch();
-                            INITIAL_PRODUCTS.forEach(p => {
+                            missingInitial.forEach(p => {
                                 const ref = db.collection('products').doc(p.id);
                                 batch.set(ref, p, { merge: true });
                             });
@@ -1023,11 +1024,13 @@
                 
                 setIsUploadingProdImg(true);
                 try {
-                    showToast('⏳ กำลังบันทึกข้อมูลผัก...', 'กำลังบันทึกชื่อ ราคา คำอธิบาย และรูปถ่ายขึ้นระบบ...', 'info');
+                    showToast('⏳ กำลังบันทึกข้อมูลผัก...', 'กำลังบีบอัดและบันทึกรูปภาพผักสดลงระบบ...', 'info');
                     let newUrl = prodImagePreview;
                     
+                    // Convert uploaded image file to compressed Base64 DataURL (Same as Logo & QR Code)
                     if (prodImageFile) {
-                        newUrl = await uploadBlobToStorage(prodImageFile, 'product_images', { maxWidth: 800, maxHeight: 800 });
+                        const compressed = await compressImageToBlob(prodImageFile, 600, 600, 0.75);
+                        newUrl = compressed.dataUrl || prodImagePreview;
                     }
 
                     if (!newUrl) {
@@ -1049,7 +1052,7 @@
                         await db.collection('products').doc(editingProductModal.id).set(updatedData, { merge: true });
                     }
 
-                    showToast('🎉 บันทึกข้อมูลผักสำเร็จ!', `อัปเดตข้อมูล "${prodName.trim()}" เรียบร้อยแล้ว`, 'success');
+                    showToast('🎉 บันทึกข้อมูลผักสำเร็จ!', `อัปเดตรูปภาพและข้อมูล "${prodName.trim()}" ถาวรเรียบร้อยแล้ว`, 'success');
                     setEditingProductModal(null);
                     setProdImagePreview('');
                     setProdImageFile(null);
