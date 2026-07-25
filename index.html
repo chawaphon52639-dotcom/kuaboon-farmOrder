@@ -1234,7 +1234,6 @@
                         </div>
                     )}
 
-                    {}
                     <main className="max-w-6xl mx-auto px-4 pt-4">
                         {view === 'store' && (
                             <div className="space-y-6">
@@ -1417,13 +1416,16 @@
                                 </div>
                             </div>
                         )}
-
-                        {}
+                        {/* Floating Cart Button */}
                         {cart.length > 0 && view === 'store' && (
-                            <div className="fixed bottom-16 sm:bottom-6 right-4 left-4 max-w-md mx-auto z-30">
+                            <div className="fixed bottom-16 sm:bottom-6 right-4 left-4 max-w-md mx-auto z-30 space-y-1.5">
+                                <div className="bg-emerald-600 text-white px-3 py-1.5 rounded-2xl text-[11px] font-black text-center shadow-lg border border-emerald-500 animate-pulse flex items-center justify-center gap-1.5">
+                                    <span>💡</span>
+                                    <span>โปรดเลือกสินค้าลงตะกร้าให้ครบถ้วน ก่อนกดสั่งซื้อนะครับ</span>
+                                </div>
                                 <button 
                                     onClick={() => setShowCartDrawer(true)}
-                                    className="w-full bg-slate-900 text-white p-4 rounded-3xl shadow-2xl flex items-center justify-between border border-slate-700 animate-bounce"
+                                    className="w-full bg-slate-900 text-white p-4 rounded-3xl shadow-2xl flex items-center justify-between border border-slate-700"
                                 >
                                     <div className="flex items-center gap-3">
                                         <div className="w-10 h-10 bg-farm-500 rounded-2xl flex items-center justify-center font-bold text-lg">
@@ -1435,7 +1437,7 @@
                                         </div>
                                     </div>
                                     <span className="bg-farm-500 text-white text-xs font-extrabold px-4 py-2 rounded-xl">
-                                        ดูตะกร้าสั่งซื้อ ➔
+                                        พร้อมสั่งซื้อ -&gt;
                                     </span>
                                 </button>
                             </div>
@@ -1444,10 +1446,15 @@
                         {showCartDrawer && (
                             <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex justify-end">
                                 <div className="bg-white w-full max-w-lg h-full overflow-y-auto p-5 space-y-6 flex flex-col justify-between">
-                                    <div className="space-y-5">
+                                    <div className="space-y-4">
                                         <div className="flex items-center justify-between border-b pb-3">
                                             <h3 className="font-extrabold text-slate-900 text-lg">🛒 ตะกร้าสินค้าและชำระเงิน</h3>
                                             <button onClick={() => setShowCartDrawer(false)} className="w-8 h-8 bg-slate-100 rounded-full font-bold text-slate-500 hover:bg-slate-200">✕</button>
+                                        </div>
+
+                                        <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-2xl text-xs font-extrabold text-emerald-900 flex items-center gap-2 shadow-sm">
+                                            <span className="text-base">📌</span>
+                                            <span>โปรดตรวจสอบและเลือกสินค้าลงตะกร้าให้ครบถ้วนก่อนกดสั่งซื้อนะครับ</span>
                                         </div>
 
                                         <div className="space-y-3 divide-y divide-slate-100 max-h-48 overflow-y-auto pr-1">
@@ -1627,7 +1634,6 @@
                             </div>
                         )}
 
-                        {}
                         {view === 'tracking' && (
                             <div className="space-y-4 max-w-3xl mx-auto">
                                 <h2 className="font-extrabold text-slate-900 text-lg">🚚 ติดตามสถานะออเดอร์จัดส่ง</h2>
@@ -1726,7 +1732,6 @@
                             </div>
                         )}
 
-                        {}
                         {view === 'backoffice' && (
                             <div className="space-y-6">
                                 {!isAdminLoggedIn ? (
@@ -1847,7 +1852,7 @@
 
                                                                 <div className="flex items-center gap-1">
                                                                     <button 
-                                                                        onClick={() => setSelectedOrderDetails({ ...order, forceDocType: 'receipt' })} 
+                                                                        onClick={() => setSelectedOrderDetails({ ...order, forceDocType: 'receipt', isBackoffice: true })} 
                                                                         className="px-2.5 py-1.5 bg-farm-800 hover:bg-farm-900 text-white text-[11px] font-bold rounded-xl shadow whitespace-nowrap flex items-center gap-1"
                                                                     >
                                                                         <span>📄</span>
@@ -1855,7 +1860,7 @@
                                                                     </button>
 
                                                                     <button 
-                                                                        onClick={() => setSelectedOrderDetails({ ...order, forceDocType: 'delivery' })} 
+                                                                        onClick={() => setSelectedOrderDetails({ ...order, forceDocType: 'delivery', isBackoffice: true })} 
                                                                         className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-[11px] font-bold rounded-xl shadow whitespace-nowrap flex items-center gap-1"
                                                                     >
                                                                         <span>📦</span>
@@ -1924,7 +1929,6 @@
                                             </div>
                                         )}
 
-                                        {}
                                         {adminTab === 'inventory' && userRole === 'admin' && (
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                                                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-3">
@@ -2027,7 +2031,6 @@
                                             </div>
                                         )}
 
-                                        {}
                                         {adminTab === 'reports' && userRole === 'admin' && (
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                                                 <div className="flex justify-between items-center border-b pb-3">
@@ -2077,13 +2080,13 @@
                                                                 <div className="flex items-center gap-1 sm:gap-2">
                                                                     <span className="font-extrabold text-farm-800 mr-1">฿{ord.total}</span>
                                                                     <button 
-                                                                        onClick={() => setSelectedOrderDetails({ ...ord, forceDocType: 'receipt' })}
+                                                                        onClick={() => setSelectedOrderDetails({ ...ord, forceDocType: 'receipt', isBackoffice: true })}
                                                                         className="px-2 py-1 bg-farm-800 text-white font-bold rounded-lg hover:bg-farm-900 transition-all text-[11px]"
                                                                     >
                                                                         📄 ใบเสร็จ
                                                                     </button>
                                                                     <button 
-                                                                        onClick={() => setSelectedOrderDetails({ ...ord, forceDocType: 'delivery' })}
+                                                                        onClick={() => setSelectedOrderDetails({ ...ord, forceDocType: 'delivery', isBackoffice: true })}
                                                                         className="px-2 py-1 bg-slate-800 text-white font-bold rounded-lg hover:bg-slate-900 transition-all text-[11px]"
                                                                     >
                                                                         📦 ใบส่งของ
@@ -2105,7 +2108,6 @@
                                             </div>
                                         )}
 
-                                        {}
                                         {adminTab === 'settings' && userRole === 'admin' && (
                                             <div className="space-y-6">
                                                 <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
@@ -2425,7 +2427,6 @@
                         )}
                     </main>
 
-                    {}
                     {selectedOrderDetails && (
                         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
                             <div className="bg-white w-full max-w-3xl rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl my-auto">
@@ -2596,10 +2597,12 @@
                                                 </div>
                                             </div>
 
-                                            <div className="mt-6 p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-amber-900 text-[11px] font-medium flex items-center gap-2">
-                                                <span className="text-base">📌</span>
-                                                <span><strong>หมายเหตุ:</strong> เอกสารฉบับนี้เป็นเอกสารอิเล็กทรอนิกส์ เอกสารฉบับจริงจะถูกจัดส่งไปพร้อมกับสินค้า</span>
-                                            </div>
+                                            {!selectedOrderDetails.isBackoffice && (
+                                                <div className="mt-6 p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-amber-900 text-[11px] font-medium flex items-center gap-2">
+                                                    <span className="text-base">📌</span>
+                                                    <span><strong>หมายเหตุ:</strong> เอกสารฉบับนี้เป็นเอกสารอิเล็กทรอนิกส์ เอกสารฉบับจริงจะถูกจัดส่งไปพร้อมกับสินค้า</span>
+                                                </div>
+                                            )}
                                         </div>
                                     );
                                 })()}
@@ -2607,7 +2610,6 @@
                         </div>
                     )}
 
-                    {}
                     {editingProductModal && (
                         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
                             <div className="bg-white rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl border my-auto">
@@ -2745,7 +2747,6 @@
                         </div>
                     )}
 
-                    {}
                     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 md:hidden z-20">
                         <div className="grid grid-cols-3 text-center py-2 text-[11px] font-bold">
                             <button onClick={() => setView('store')} className={`space-y-0.5 ${view === 'store' ? 'text-farm-800 font-extrabold' : 'text-slate-400'}`}>
