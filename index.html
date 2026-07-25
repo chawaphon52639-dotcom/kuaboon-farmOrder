@@ -97,14 +97,48 @@
             firebase.initializeApp(firebaseConfig);
         }
         const db = firebase.firestore();
+        
+        try {
+            db.settings({
+                experimentalForceLongPolling: true
+            });
+        } catch (e) {
+            console.warn("Firestore settings configuration:", e);
+        }
+
         const storage = firebase.storage();
 
         const roundStep = (num) => Math.round((num + Number.EPSILON) * 10) / 10;
 
-        const getFallbackSvg = (name) => {
-            const encodedName = encodeURIComponent(name || 'ผักสด');
-            return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400"><rect width="400" height="400" fill="%23dcfce7"/><text x="50%" y="45%" dominant-baseline="middle" text-anchor="middle" font-size="70">🥬</text><text x="50%" y="65%" dominant-baseline="middle" text-anchor="middle" font-size="22" font-weight="bold" fill="%2314532d">${encodedName}</text></svg>`;
+        const getFallbackSvg = (name, bg = '#dcfce7', textCol = '#14532d', emoji = '🥬') => {
+            const textName = name || 'ผักสดอินทรีย์';
+            const svgString = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400"><rect width="400" height="400" fill="${bg}" rx="36"/><circle cx="200" cy="170" r="110" fill="#ffffff" opacity="0.6"/><text x="50%" y="42%" dominant-baseline="middle" text-anchor="middle" font-size="95">${emoji}</text><text x="50%" y="68%" dominant-baseline="middle" text-anchor="middle" font-size="22" font-weight="bold" fill="${textCol}" font-family="sans-serif">${textName}</text><text x="50%" y="82%" dominant-baseline="middle" text-anchor="middle" font-size="14" font-weight="bold" fill="#166534" font-family="sans-serif">เกื้อบุญฟาร์ม • ผักสดปลอดสาร</text></svg>`;
+            return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgString)}`;
         };
+
+        const PRODUCT_SVGS = {
+            greenOak: getFallbackSvg('กรีนโอ๊ค (Green Oak)', '#dcfce7', '#14532d', '🥗'),
+            redOak: getFallbackSvg('เรดโอ๊ค (Red Oak)', '#fce7f3', '#831843', '🥬'),
+            greenCos: getFallbackSvg('กรีนคอส (Green Cos)', '#d1fae5', '#065f46', '🥬'),
+            babyCos: getFallbackSvg('เบบี้คอส (Baby Cos)', '#ecfdf5', '#047857', '🌱'),
+            frillice: getFallbackSvg('ฟินเลย์ (Frillice)', '#ccfbf1', '#115e59', '🥗'),
+            butterhead: getFallbackSvg('บัตเตอร์เฮด (Butterhead)', '#fef08a', '#854d0e', '🥬'),
+            kale: getFallbackSvg('ผักเคลสด (Organic Kale)', '#a7f3d0', '#064e3b', '🌿'),
+            mixedSalad: getFallbackSvg('ผักสลัดรวม (Mixed Salad)', '#ffedd5', '#9a3412', '🥗'),
+            kaleDrink: getFallbackSvg('น้ำเคลปั่นสด (300 ml)', '#bbf7d0', '#166534', '🥤')
+        };
+
+        const INITIAL_PRODUCTS = [
+            { id: '1', name: 'กรีนโอ๊ค (Green Oak)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 45, unit: 'กก.', image: PRODUCT_SVGS.greenOak, desc: 'ผักปลอดสาร สด กรอบ หวาน ไม่ขม เก็บสดจากแปลงทุกเช้า' },
+            { id: '2', name: 'เรดโอ๊ค (Red Oak)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 30, unit: 'กก.', image: PRODUCT_SVGS.redOak, desc: 'ผักปลอดสาร ใบสีแดงม่วง สวยงาม ไฟเบอร์สูง เหมาะทำสลัด' },
+            { id: '3', name: 'กรีนคอส (Green Cos)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 20, unit: 'กก.', image: PRODUCT_SVGS.greenCos, desc: 'ผักปลอดสาร ใบกรอบ ทรงสวย รสชาติหวานกรอบธรรมชาติ' },
+            { id: '4', name: 'เบบี้คอส (Baby Cos)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 25, unit: 'กก.', image: PRODUCT_SVGS.babyCos, desc: 'ผักปลอดสาร กรอบ แน่น เหมาะสำหรับทำซีซาร์สลัด' },
+            { id: '5', name: 'ฟินเลย์ (Frillice Iceberg)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 15, unit: 'กก.', image: PRODUCT_SVGS.frillice, desc: 'ผักปลอดสาร ใบหยิกกรอบมาก ฉ่ำน้ำ ทานง่าย' },
+            { id: '6', name: 'บัตเตอร์เฮด (Butterhead)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 18, unit: 'กก.', image: PRODUCT_SVGS.butterhead, desc: 'ผักปลอดสาร ใบนุ่มละมุน หวานธรรมชาติ ไม่มีความขม' },
+            { id: '7', name: 'ผักเคลสด (Organic Kale)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 12, unit: 'กก.', image: PRODUCT_SVGS.kale, desc: 'ราชินีแห่งผักใบเขียวปลอดสาร คุณประโยชน์สูง วิตามินแน่น' },
+            { id: '8', name: 'ผักสลัดรวม (Mixed Salad)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 50, unit: 'กก.', image: PRODUCT_SVGS.mixedSalad, desc: 'ผักปลอดสารสลัดรวมมิตร คละชนิด สด กรอบ พร้อมทาน' },
+            { id: '9', name: 'น้ำเคลปั่นสด (ขนาด 300 ml)', category: 'drink', priceRetail: 50, priceWholesale: 50, stock: 40, unit: 'ขวด', image: PRODUCT_SVGS.kaleDrink, desc: 'น้ำเคลปั่นสกัดสด ขนาด 300 ml เข้มข้น สดชื่น ปลอดสาร 100%' }
+        ];
 
         async function compressImageToBlob(fileOrDataUrl, maxWidth = 800, maxHeight = 800, quality = 0.8) {
             return new Promise((resolve, reject) => {
@@ -121,7 +155,7 @@
                     } else {
                         if (height > maxHeight) {
                             width = Math.round((width * maxHeight) / height);
-                            height = maxHeight;
+                            width = maxHeight;
                         }
                     }
 
@@ -156,25 +190,20 @@
 
         async function uploadBlobToStorage(fileOrDataUrl, folderName, options = {}) {
             if (!fileOrDataUrl) return null;
-            if (typeof fileOrDataUrl === 'string' && fileOrDataUrl.startsWith('http')) {
+            if (typeof fileOrDataUrl === 'string' && (fileOrDataUrl.startsWith('http') || fileOrDataUrl.startsWith('data:image/svg'))) {
                 return fileOrDataUrl;
             }
 
-            const rawUpload = options.rawUpload || false;
             let blob = null;
             let dataUrlFallback = null;
 
-            if (rawUpload && (fileOrDataUrl instanceof File || fileOrDataUrl instanceof Blob)) {
-                blob = fileOrDataUrl;
-            } else {
-                try {
-                    const compressed = await compressImageToBlob(fileOrDataUrl, options.maxWidth || 800, options.maxHeight || 800, options.quality || 0.8);
-                    blob = compressed.blob;
-                    dataUrlFallback = compressed.dataUrl;
-                } catch (err) {
-                    if (typeof fileOrDataUrl === 'string') return fileOrDataUrl;
-                    throw err;
-                }
+            try {
+                const compressed = await compressImageToBlob(fileOrDataUrl, options.maxWidth || 600, options.maxHeight || 600, options.quality || 0.8);
+                blob = compressed.blob;
+                dataUrlFallback = compressed.dataUrl;
+            } catch (err) {
+                if (typeof fileOrDataUrl === 'string') return fileOrDataUrl;
+                throw err;
             }
 
             try {
@@ -237,41 +266,31 @@
             return bahtStr;
         }
 
-        const INITIAL_PRODUCTS = [
-            { id: '1', name: 'กรีนโอ๊ค (Green Oak)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 45, unit: 'กก.', image: 'https://images.unsplash.com/photo-1622206151226-18ca2c9ab4a1?auto=format&fit=crop&w=600&q=80', desc: 'ผักปลอดสาร สด กรอบ หวาน ไม่ขม เก็บสดจากแปลงทุกเช้า' },
-            { id: '2', name: 'เรดโอ๊ค (Red Oak)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 30, unit: 'กก.', image: 'https://images.unsplash.com/photo-1556801712-76c8eb07ebb1?auto=format&fit=crop&w=600&q=80', desc: 'ผักปลอดสาร ใบสีแดงม่วง สวยงาม ไฟเบอร์สูง เหมาะทำสลัด' },
-            { id: '3', name: 'กรีนคอส (Green Cos)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 20, unit: 'กก.', image: 'https://images.unsplash.com/photo-1515471209610-e3f170587778?auto=format&fit=crop&w=600&q=80', desc: 'ผักปลอดสาร ใบกรอบ ทรงสวย รสชาติหวานกรอบธรรมชาติ' },
-            { id: '4', name: 'เบบี้คอส (Baby Cos)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 25, unit: 'กก.', image: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=600&q=80', desc: 'ผักปลอดสาร กรอบ แน่น เหมาะสำหรับทำซีซาร์สลัด' },
-            { id: '5', name: 'ฟินเลย์ (Frillice Iceberg)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 15, unit: 'กก.', image: 'https://images.unsplash.com/photo-1508747703725-719777637510?auto=format&fit=crop&w=600&q=80', desc: 'ผักปลอดสาร ใบหยิกกรอบมาก ฉ่ำน้ำ ทานง่าย' },
-            { id: '6', name: 'บัตเตอร์เฮด (Butterhead)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 18, unit: 'กก.', image: 'https://images.unsplash.com/photo-1556801712-76c8eb07ebb1?auto=format&fit=crop&w=600&q=80', desc: 'ผักปลอดสาร ใบนุ่มละมุน หวานธรรมชาติ ไม่มีความขม' },
-            { id: '7', name: 'ผักเคลสด (Organic Kale)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 12, unit: 'กก.', image: 'https://images.unsplash.com/photo-1524179091875-bf98a9a6ae57?auto=format&fit=crop&w=600&q=80', desc: 'ราชินีแห่งผักใบเขียวปลอดสาร คุณประโยชน์สูง วิตามินแน่น' },
-            { id: '8', name: 'ผักสลัดรวม (Mixed Salad)', category: 'salad', priceRetail: 120, priceWholesale: 100, stock: 50, unit: 'กก.', image: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=600&q=80', desc: 'ผักปลอดสารสลัดรวมมิตร คละชนิด สด กรอบ พร้อมทาน' },
-            { id: '9', name: 'น้ำเคลปั่นสด (ขนาด 300 ml)', category: 'drink', priceRetail: 50, priceWholesale: 50, stock: 40, unit: 'ขวด', image: 'https://images.unsplash.com/photo-1610970881699-44a5587cabec?auto=format&fit=crop&w=600&q=80', desc: 'น้ำเคลปั่นสกัดสด ขนาด 300 ml เข้มข้น สดชื่น ปลอดสาร 100%' }
-        ];
-
         function App() {
             const [view, setView] = React.useState('store');
             const [products, setProducts] = React.useState(INITIAL_PRODUCTS);
             const [cart, setCart] = React.useState([]);
             const [customerType, setCustomerType] = React.useState('retail');
-            const [showRetailNoticeModal, setShowRetailNoticeModal] = React.useState(true);
             const [selectedCategory, setSelectedCategory] = React.useState('all');
             const [orders, setOrders] = React.useState([]);
             const [isSubmitting, setIsSubmitting] = React.useState(false);
             const [isFirebaseConnected, setIsFirebaseConnected] = React.useState(false);
+            const [showRetailNoticeModal, setShowRetailNoticeModal] = React.useState(true);
+            const [logoLoadFailed, setLogoLoadFailed] = React.useState(false);
 
             // Checkout state
             const [custName, setCustName] = React.useState('');
             const [custPhone, setCustPhone] = React.useState('');
             const [custAddress, setCustAddress] = React.useState('');
-            const [custPickupTime, setCustPickupTime] = React.useState('');
             const [custMapsUrl, setCustMapsUrl] = React.useState('');
+            const [custPickupTime, setCustPickupTime] = React.useState('');
             const [isCreditOrder, setIsCreditOrder] = React.useState(false);
             const [slipPreview, setSlipPreview] = React.useState('');
             const [slipFile, setSlipFile] = React.useState(null);
 
-            // Notification Modal State
+            // Notification & Confirmation Modal State
             const [toastModal, setToastModal] = React.useState({ show: false, title: '', message: '', type: 'info' });
+            const [confirmModal, setConfirmModal] = React.useState({ show: false, title: '', message: '', actionText: 'ตกลง', onConfirm: null });
 
             // Backoffice State
             const [adminPin, setAdminPin] = React.useState('');
@@ -301,12 +320,14 @@
             const [isUploadingProdImg, setIsUploadingProdImg] = React.useState(false);
 
             // Settings State
-            const [farmName, setFarmName] = React.useState('เกื้อบุญฟาร์ม (Kuaboon Farm)');
+            const [farmName, setFarmName] = React.useState('บริษัท กาฬสินธุ์เกื้อบุญ จำกัด');
             const [taxId, setTaxId] = React.useState('0105563012345');
-            const [farmAddress, setFarmAddress] = React.useState('123 หมู่ 4 ต.ผักสด อ.เมือง จ.นครราชสีมา 30000');
-            const [farmPhone, setFarmPhone] = React.useState('081-234-5678');
-            const [promptpayNo, setPromptpayNo] = React.useState('0812345678');
-            const [bankAccountNo, setBankAccountNo] = React.useState('123-4-56789-0 (ธนาคารกสิกรไทย)');
+            const [farmAddress, setFarmAddress] = React.useState('123 หมู่ 4 ต.ผักสด อ.เมือง จ.กาฬสินธุ์ 46000');
+            const [farmPhone, setFarmPhone] = React.useState('091-9251999');
+            const [promptpayNo, setPromptpayNo] = React.useState('0919251999');
+            const [bankAccountNo, setBankAccountNo] = React.useState('188-8-508-178 (ธนาคารกสิกรไทย กระแสรายวัน)');
+            const [farmLogoImage, setFarmLogoImage] = React.useState('');
+            const [farmLogoFile, setFarmLogoFile] = React.useState(null);
             const [customQrImage, setCustomQrImage] = React.useState('');
             const [customQrFile, setCustomQrFile] = React.useState(null);
             const [isSavingSettings, setIsSavingSettings] = React.useState(false);
@@ -334,7 +355,6 @@
             React.useEffect(() => { viewRef.current = view; }, [view]);
             React.useEffect(() => { isAdminLoggedInRef.current = isAdminLoggedIn; }, [isAdminLoggedIn]);
 
-            // Speech Synthesis Alert (Repeats 3 times)
             const playLoudAlert = () => {
                 try {
                     if ('speechSynthesis' in window) {
@@ -372,6 +392,19 @@
 
             const showToast = (title, message, type = 'info') => {
                 setToastModal({ show: true, title, message, type });
+            };
+
+            const askConfirmation = (title, message, actionText, onConfirm) => {
+                setConfirmModal({
+                    show: true,
+                    title,
+                    message,
+                    actionText: actionText || 'ตกลง',
+                    onConfirm: () => {
+                        setConfirmModal({ show: false, title: '', message: '', actionText: 'ตกลง', onConfirm: null });
+                        if (onConfirm) onConfirm();
+                    }
+                });
             };
 
             React.useEffect(() => {
@@ -430,6 +463,10 @@
                         if (data.farmPhone) setFarmPhone(data.farmPhone);
                         if (data.promptpayNo) setPromptpayNo(data.promptpayNo);
                         if (data.bankAccountNo) setBankAccountNo(data.bankAccountNo);
+                        if (data.farmLogoImage !== undefined) {
+                            setFarmLogoImage(data.farmLogoImage);
+                            setLogoLoadFailed(false);
+                        }
                         if (data.customQrImage !== undefined) setCustomQrImage(data.customQrImage);
                         if (data.masterAdminPin) setMasterAdminPin(data.masterAdminPin);
                         if (data.staffList) setStaffList(data.staffList);
@@ -446,7 +483,7 @@
 
             const handleForceSync9Products = async () => {
                 try {
-                    showToast('⚡ กำลังซิงค์ผักครบ 9 รายการ...', 'กำลังส่งข้อมูลผักทั้ง 8 ชนิด + น้ำปั่นเคล เข้าสู่ Firebase...', 'info');
+                    showToast('⚡ กำลังซิงค์ผักครบ 9 รายการ...', 'กำลังส่งข้อมูลผักสดพร้อมภาพประกอบเข้าสู่ Firebase...', 'info');
                     const batch = db.batch();
                     INITIAL_PRODUCTS.forEach(p => {
                         const ref = db.collection('products').doc(p.id);
@@ -630,80 +667,86 @@
                 }
             };
 
-            const handleCancelOrder = async (order) => {
+            const handleCancelOrder = (order) => {
                 if (order.slipImage) {
                     showToast('⛔ ไม่สามารถยกเลิกได้', 'เนื่องจากมีการแนบสลิปโอนเงินและทำการตัดยอดเงินเรียบร้อยแล้ว หากต้องการเปลี่ยนแปลงกรุณาติดต่อฟาร์มโดยตรง', 'error');
                     return;
                 }
 
-                if (!window.confirm(`⚠️ ยืนยันยกเลิกออเดอร์เลขที่ ${order.docNo} หรือไม่?\nระบบจะทำการคืนผักสดเข้าสต็อกให้อัตโนมัติ`)) {
-                    return;
-                }
+                askConfirmation(
+                    '⚠️ ยืนยันยกเลิกออเดอร์',
+                    `ต้องการยกเลิกออเดอร์เลขที่ ${order.docNo} หรือไม่?\nระบบจะทำการคืนผักสดเข้าสต็อกให้อัตโนมัติ`,
+                    'ยืนยันยกเลิก',
+                    async () => {
+                        try {
+                            if (isFirebaseConnected) {
+                                const batch = db.batch();
+                                const orderRef = db.collection('orders').doc(order.id);
+                                batch.update(orderRef, { status: 'cancelled' });
 
-                try {
-                    if (isFirebaseConnected) {
-                        const batch = db.batch();
-                        const orderRef = db.collection('orders').doc(order.id);
-                        batch.update(orderRef, { status: 'cancelled' });
-
-                        if (order.items) {
-                            order.items.forEach(item => {
-                                const prodRef = db.collection('products').doc(item.id);
-                                const currentProd = products.find(p => p.id === item.id);
-                                if (currentProd) {
-                                    const restoredStock = roundStep(currentProd.stock + (item.qty || 0));
-                                    batch.update(prodRef, { stock: restoredStock });
+                                if (order.items) {
+                                    order.items.forEach(item => {
+                                        const prodRef = db.collection('products').doc(item.id);
+                                        const currentProd = products.find(p => p.id === item.id);
+                                        if (currentProd) {
+                                            const restoredStock = roundStep(currentProd.stock + (item.qty || 0));
+                                            batch.update(prodRef, { stock: restoredStock });
+                                        }
+                                    });
                                 }
-                            });
-                        }
 
-                        await batch.commit();
-                    } else {
-                        setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'cancelled' } : o));
+                                await batch.commit();
+                            } else {
+                                setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'cancelled' } : o));
+                            }
+                            showToast('✅ ยกเลิกออเดอร์สำเร็จ', 'ทำการยกเลิกออเดอร์และคืนจำนวนผักสดเข้าสต็อกเรียบร้อยแล้ว', 'success');
+                        } catch (err) {
+                            console.error("Cancel order error:", err);
+                            showToast('❌ ยกเลิกไม่สำเร็จ', 'เกิดข้อผิดพลาดในการยกเลิกออเดอร์', 'error');
+                        }
                     }
-                    showToast('✅ ยกเลิกออเดอร์สำเร็จ', 'ทำการยกเลิกออเดอร์และคืนจำนวนผักสดเข้าสต็อกเรียบร้อยแล้ว', 'success');
-                } catch (err) {
-                    console.error("Cancel order error:", err);
-                    showToast('❌ ยกเลิกไม่สำเร็จ', 'เกิดข้อผิดพลาดในการยกเลิกออเดอร์', 'error');
-                }
+                );
             };
 
-            const handleDeleteOrderAdmin = async (order) => {
+            const handleDeleteOrderAdmin = (order) => {
                 if (userRole !== 'admin') {
                     showToast('🔒 สิทธิ์ไม่เพียงพอ', 'เฉพาะผู้บริหาร (Admin) เท่านั้นที่สามารถลบออเดอร์ได้', 'error');
                     return;
                 }
 
-                if (!window.confirm(`⚠️ ยืนยันลบออเดอร์ ${order.docNo} ของคุณ ${order.customerName}?\nระบบจะทำการคืนจำนวนผักสดเข้าสต็อกให้อัตโนมัติ`)) {
-                    return;
-                }
+                askConfirmation(
+                    '🗑️ ยืนยันลบรายการออเดอร์',
+                    `คุณน้าต้องการลบออเดอร์ ${order.docNo} ของคุณ ${order.customerName} หรือไม่?\nระบบจะทำการคืนจำนวนผักสดเข้าสต็อกให้อัตโนมัติ`,
+                    'ยืนยันลบออเดอร์',
+                    async () => {
+                        try {
+                            if (isFirebaseConnected) {
+                                const batch = db.batch();
+                                const orderRef = db.collection('orders').doc(order.id);
+                                batch.delete(orderRef);
 
-                try {
-                    if (isFirebaseConnected) {
-                        const batch = db.batch();
-                        const orderRef = db.collection('orders').doc(order.id);
-                        batch.delete(orderRef);
-
-                        if (order.status !== 'cancelled' && order.items) {
-                            order.items.forEach(item => {
-                                const prodRef = db.collection('products').doc(item.id);
-                                const currentProd = products.find(p => p.id === item.id);
-                                if (currentProd) {
-                                    const restoredStock = roundStep(currentProd.stock + (item.qty || 0));
-                                    batch.update(prodRef, { stock: restoredStock });
+                                if (order.status !== 'cancelled' && order.items) {
+                                    order.items.forEach(item => {
+                                        const prodRef = db.collection('products').doc(item.id);
+                                        const currentProd = products.find(p => p.id === item.id);
+                                        if (currentProd) {
+                                            const restoredStock = roundStep(currentProd.stock + (item.qty || 0));
+                                            batch.update(prodRef, { stock: restoredStock });
+                                        }
+                                    });
                                 }
-                            });
-                        }
 
-                        await batch.commit();
-                    } else {
-                        setOrders(prev => prev.filter(o => o.id !== order.id));
+                                await batch.commit();
+                            } else {
+                                setOrders(prev => prev.filter(o => o.id !== order.id));
+                            }
+                            showToast('🗑️ ลบออเดอร์สำเร็จ!', `ลบรายการ ${order.docNo} และคืนผักเข้าสต็อกเรียบร้อยแล้ว`, 'success');
+                        } catch (err) {
+                            console.error("Delete order error:", err);
+                            showToast('❌ ไม่สามารถลบได้', 'เกิดข้อผิดพลาดในการลบออเดอร์', 'error');
+                        }
                     }
-                    showToast('🗑️ ลบออเดอร์สำเร็จ!', `ลบรายการ ${order.docNo} และคืนผักเข้าสต็อกเรียบร้อยแล้ว`, 'success');
-                } catch (err) {
-                    console.error("Delete order error:", err);
-                    showToast('❌ ไม่สามารถลบได้', 'เกิดข้อผิดพลาดในการลบออเดอร์', 'error');
-                }
+                );
             };
 
             const handleBackofficeLogin = (e) => {
@@ -729,7 +772,6 @@
                 }
             };
 
-            // Order status update logic with proof photo lock requirement
             const updateOrderStatus = async (orderId, newStatus) => {
                 const targetOrder = orders.find(o => o.id === orderId);
                 if (newStatus === 'completed' && targetOrder && !targetOrder.proofImage) {
@@ -872,10 +914,18 @@
                 e.preventDefault();
                 setIsSavingSettings(true);
                 try {
+                    let logoUrl = farmLogoImage;
+                    if (farmLogoFile) {
+                        logoUrl = await uploadBlobToStorage(farmLogoFile, 'farm_logo', { maxWidth: 500, maxHeight: 500, quality: 0.8 });
+                    }
+
                     let qrUrl = customQrImage;
                     if (customQrFile) {
-                        qrUrl = await uploadBlobToStorage(customQrFile, 'farm_settings', { rawUpload: true });
+                        qrUrl = await uploadBlobToStorage(customQrFile, 'farm_settings', { maxWidth: 600, maxHeight: 600, quality: 0.8 });
                     }
+
+                    const finalLogo = logoUrl || farmLogoImage || '';
+                    const finalQr = qrUrl || customQrImage || '';
 
                     const settingsData = {
                         farmName,
@@ -884,21 +934,43 @@
                         farmPhone,
                         promptpayNo,
                         bankAccountNo,
-                        customQrImage: qrUrl || '',
+                        farmLogoImage: finalLogo,
+                        customQrImage: finalQr,
                         masterAdminPin,
                         staffList,
                         wholesaleWhitelist,
                         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                     };
 
+                    setFarmLogoImage(finalLogo);
+                    setCustomQrImage(finalQr);
+                    setFarmLogoFile(null);
+                    setCustomQrFile(null);
+                    setLogoLoadFailed(false);
+
                     if (isFirebaseConnected) {
                         await db.collection('settings').doc('farm_config').set(settingsData, { merge: true });
                     }
-                    showToast('💾 บันทึกตั้งค่าสำเร็จ', 'ข้อมูลฟาร์มและรูปภาพเรียบร้อยแล้ว', 'success');
+                    showToast('💾 บันทึกตั้งค่าสำเร็จ', 'ข้อมูลฟาร์ม รูปโลโก้ และรูปภาพเรียบร้อยแล้ว', 'success');
                 } catch (err) {
                     console.error("Save settings error:", err);
+                    showToast('❌ ไม่สามารถบันทึกได้', 'เกิดข้อผิดพลาดในการบันทึกข้อมูลตั้งค่า', 'error');
                 } finally {
                     setIsSavingSettings(false);
+                }
+            };
+
+            const handleClearFarmLogo = async () => {
+                setFarmLogoImage('');
+                setFarmLogoFile(null);
+                setLogoLoadFailed(false);
+                try {
+                    if (isFirebaseConnected) {
+                        await db.collection('settings').doc('farm_config').set({ farmLogoImage: '' }, { merge: true });
+                    }
+                    showToast('🗑️ ลบรูปโลโก้สำเร็จ', 'ระบบรีเซ็ตกลับไปใช้ไอคอนผักสดอัตโนมัติแล้ว', 'info');
+                } catch (err) {
+                    console.error("Clear Logo error:", err);
                 }
             };
 
@@ -994,9 +1066,21 @@
                     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
                         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
                             <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('store')}>
-                                <div className="w-10 h-10 bg-farm-800 text-white rounded-2xl flex items-center justify-center font-bold text-xl shadow-md shadow-farm-800/30">
-                                    🥬
-                                </div>
+                                {(farmLogoImage && !logoLoadFailed) ? (
+                                    <img 
+                                        src={farmLogoImage} 
+                                        alt="Farm Logo" 
+                                        className="h-11 sm:h-12 w-auto max-w-[140px] object-contain rounded-xl bg-white p-1 shadow-md border border-slate-200 flex-shrink-0" 
+                                        onError={(e) => {
+                                            console.warn("Logo load failed, showing default icon");
+                                            setLogoLoadFailed(true);
+                                        }}
+                                    />
+                                ) : (
+                                    <div className="w-11 h-11 bg-farm-800 text-white rounded-2xl flex items-center justify-center font-bold text-2xl shadow-md shadow-farm-800/30 flex-shrink-0">
+                                        🥬
+                                    </div>
+                                )}
                                 <div>
                                     <h1 className="font-extrabold text-slate-900 text-base sm:text-lg leading-tight">{farmName}</h1>
                                     <p className="text-[11px] text-slate-500 font-medium">ผักสดส่งตรงจากฟาร์มทุกวัน • ✨ พัฒนาระบบ โดย @น้ารามเกื้อบุญ</p>
@@ -1058,6 +1142,7 @@
                         </div>
                     )}
 
+                    {/* Notification Modal */}
                     {toastModal.show && (
                         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
                             <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl border text-center">
@@ -1081,7 +1166,38 @@
                         </div>
                     )}
 
-                    {/* Pop-up Notice for Retail Customer Tier */}
+                    {/* Confirmation Modal */}
+                    {confirmModal.show && (
+                        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+                            <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-5 shadow-2xl border text-center">
+                                <div className="w-14 h-14 bg-rose-100 text-rose-700 rounded-2xl mx-auto flex items-center justify-center text-3xl font-extrabold">
+                                    ⚠️
+                                </div>
+                                <div className="space-y-2">
+                                    <h3 className="font-extrabold text-slate-900 text-base">{confirmModal.title}</h3>
+                                    <p className="text-slate-600 text-xs leading-relaxed whitespace-pre-line bg-slate-50 p-3 rounded-xl border text-left font-medium">{confirmModal.message}</p>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button 
+                                        type="button"
+                                        onClick={() => setConfirmModal({ ...confirmModal, show: false })}
+                                        className="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs"
+                                    >
+                                        ยกเลิก
+                                    </button>
+                                    <button 
+                                        type="button"
+                                        onClick={confirmModal.onConfirm}
+                                        className="py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-extrabold text-xs shadow"
+                                    >
+                                        {confirmModal.actionText}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Delivery Area Notice Modal */}
                     {showRetailNoticeModal && view === 'store' && customerType === 'retail' && (
                         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
                             <div className="bg-white text-slate-900 rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl border-2 border-emerald-500 text-center">
@@ -1089,28 +1205,21 @@
                                     🛵
                                 </div>
                                 <div className="space-y-3">
-                                    <h3 className="font-black text-emerald-950 text-xl sm:text-2xl leading-tight">📍 ประกาศเขตพื้นที่และรอบจัดส่งผักสด</h3>
-                                    
-                                    {/* Consolidated notice box */}
-                                    <div className="bg-emerald-50/90 p-4 sm:p-5 rounded-2xl text-left border-2 border-emerald-200 shadow-sm space-y-3 font-bold text-slate-800">
-                                        <p className="text-emerald-950 font-black text-base sm:text-lg border-b border-emerald-200 pb-2 flex items-center gap-2">
-                                            <span>🛵</span> <span>เงื่อนไขการจัดส่งสำหรับลูกค้าทั่วไป:</span>
+                                    <h3 className="font-black text-emerald-950 text-xl sm:text-2xl leading-tight">📍 ประกาศเขตพื้นที่จัดส่งผักสด</h3>
+                                    <div className="bg-emerald-50/80 p-4 sm:p-5 rounded-2xl text-left border border-emerald-200 shadow-sm space-y-2 text-sm sm:text-base font-bold text-slate-800">
+                                        <p className="text-emerald-900 font-extrabold text-sm sm:text-base border-b border-emerald-200 pb-1.5">🛵 เงื่อนไขการจัดส่งสำหรับลูกค้าทั่วไป:</p>
+                                        <p className="leading-relaxed text-sm sm:text-base">
+                                            • ส่งในเขต <strong>เทศบาลเมืองกาฬสินธุ์เท่านั้น</strong><br/>
+                                            • นัดสถานที่รับได้ <strong>[ในเขต เทศบาลเมืองกาฬสินธุ์]</strong><br/>
+                                            • หรือหากสะดวก รบกวนมารับที่ฟาร์มครับ 🌿
                                         </p>
-                                        
-                                        <div className="space-y-1.5 text-sm sm:text-base leading-relaxed text-slate-900">
-                                            <p>• ส่งในเขต <strong>เทศบาลเมืองกาฬสินธุ์เท่านั้น</strong></p>
-                                            <p>• นัดสถานที่รับได้ <strong>[ในเขต เทศบาลเมืองกาฬสินธุ์]</strong></p>
-                                            <p>• หรือหากสะดวก รบกวนมารับที่ฟาร์มครับ 🌿</p>
-                                        </div>
 
-                                        {/* Red text for delivery rounds in the exact same box */}
-                                        <div className="pt-3 border-t-2 border-emerald-200/80 space-y-1.5">
-                                            <p className="text-rose-600 font-black text-sm sm:text-base flex items-center gap-1.5">
-                                                <span>⏰</span> <span>รอบเช้าเริ่มส่ง 10.30 - 12.30 น.</span>
+                                        <div className="pt-2 border-t border-emerald-200 text-rose-600 font-black text-sm sm:text-base space-y-1">
+                                            <p className="text-rose-700 font-black flex items-center gap-1">
+                                                <span>⏰</span> <span>รอบเวลาจัดส่งผักสดประจำวัน:</span>
                                             </p>
-                                            <p className="text-rose-600 font-black text-sm sm:text-base flex items-center gap-1.5">
-                                                <span>⏰</span> <span>รอบบ่ายเริ่มส่ง 14.00 - 15.30 น.</span>
-                                            </p>
+                                            <p className="text-rose-600 font-black pt-0.5">• รอบเช้าเริ่มส่ง 10.30 - 12.30 น.</p>
+                                            <p className="text-rose-600 font-black">• รอบบ่ายเริ่มส่ง 14.00 - 15.30 น.</p>
                                         </div>
                                     </div>
                                 </div>
@@ -1125,7 +1234,7 @@
                         </div>
                     )}
 
-                    {/* Main Content Area */}
+                    {}
                     <main className="max-w-6xl mx-auto px-4 pt-4">
                         {view === 'store' && (
                             <div className="space-y-6">
@@ -1138,6 +1247,16 @@
                                             <span className="bg-amber-400 text-farm-900 text-[10px] font-black px-3 py-1 rounded-full shadow-sm">
                                                 ✨ พัฒนาระบบ โดย @น้ารามเกื้อบุญ
                                             </span>
+                                            {(farmLogoImage && !logoLoadFailed) && (
+                                                <div className="bg-white p-1 rounded-xl shadow-md border border-slate-200 flex items-center justify-center">
+                                                    <img 
+                                                        src={farmLogoImage} 
+                                                        alt="Farm Logo" 
+                                                        className="h-8 w-auto max-w-[120px] object-contain flex-shrink-0" 
+                                                        onError={() => setLogoLoadFailed(true)}
+                                                    />
+                                                </div>
+                                            )}
                                         </div>
                                         <h2 className="text-2xl sm:text-3xl font-extrabold leading-tight">สดใหม่กรอบอร่อย ส่งตรงจากฟาร์มทุกวัน</h2>
                                         <p className="text-emerald-100 text-xs sm:text-sm">
@@ -1155,10 +1274,7 @@
                                     <div className="flex bg-slate-100 p-1.5 rounded-2xl w-full sm:w-auto gap-1">
                                         <button 
                                             type="button"
-                                            onClick={() => {
-                                                setCustomerType('retail');
-                                                setShowRetailNoticeModal(true);
-                                            }}
+                                            onClick={() => { setCustomerType('retail'); setShowRetailNoticeModal(true); }}
                                             className={`flex-1 sm:flex-initial px-5 py-2 rounded-xl text-xs font-extrabold transition-all shadow-sm ${
                                                 customerType === 'retail' 
                                                 ? 'bg-farm-800 text-white shadow-farm-800/30 ring-2 ring-farm-800' 
@@ -1302,7 +1418,7 @@
                             </div>
                         )}
 
-                        {/* Cart Drawer Button */}
+                        {}
                         {cart.length > 0 && view === 'store' && (
                             <div className="fixed bottom-16 sm:bottom-6 right-4 left-4 max-w-md mx-auto z-30">
                                 <button 
@@ -1325,7 +1441,6 @@
                             </div>
                         )}
 
-                        {}
                         {showCartDrawer && (
                             <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex justify-end">
                                 <div className="bg-white w-full max-w-lg h-full overflow-y-auto p-5 space-y-6 flex flex-col justify-between">
@@ -1393,10 +1508,10 @@
                                                 <label className="font-bold text-slate-700 block mb-1">⏰ ระบุเวลานัดรับผัก (กรณีเดินทางมารับที่ฟาร์มเอง)</label>
                                                 <input 
                                                     type="text" 
-                                                    placeholder="เช่น 10:30 น. หรือ ช่วงบ่าย 2" 
+                                                    placeholder="เช่น มารับเวลา 10:30 น. หรือ ช่วงบ่าย 2" 
                                                     value={custPickupTime}
                                                     onChange={e => setCustPickupTime(e.target.value)}
-                                                    className="w-full p-2.5 border rounded-xl bg-amber-50/70 border-amber-200 outline-none focus:border-farm-800 font-semibold"
+                                                    className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none focus:border-farm-800 text-xs"
                                                 />
                                             </div>
 
@@ -1445,6 +1560,10 @@
                                                                 alt="PromptPay QR" 
                                                                 className="w-52 h-52 sm:w-60 sm:h-60 mx-auto object-contain rounded-lg"
                                                                 style={{ imageRendering: 'pixelated' }}
+                                                                onError={(e) => {
+                                                                    e.target.onerror = null;
+                                                                    e.target.src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=PromptPay-${promptpayNo}-${cartTotal}`;
+                                                                }}
                                                             />
                                                         </div>
                                                         <div className="text-xs text-slate-700 font-mono font-bold bg-amber-50 p-3 rounded-2xl border border-amber-200 text-left space-y-1">
@@ -1452,15 +1571,13 @@
                                                             {bankAccountNo && <div className="text-xs text-slate-800 font-sans font-bold">{bankAccountNo}</div>}
                                                         </div>
 
-                                                        {/* Phone Contact Banner moved here under PromptPay QR scan details */}
-                                                        <div className="bg-emerald-50 border border-emerald-300 p-3 rounded-2xl text-xs sm:text-sm font-bold text-emerald-900 space-y-1 text-left">
-                                                            <p className="font-extrabold text-emerald-950 flex items-center gap-1.5">
+                                                        {/* Contact Numbers Banner */}
+                                                        <div className="bg-emerald-50 p-3 rounded-2xl border border-emerald-200 text-left text-xs font-bold text-emerald-950 space-y-1">
+                                                            <p className="font-extrabold text-emerald-900 flex items-center gap-1">
                                                                 <span>📞</span> <span>เบอร์ติดต่อสอบถาม/ติดต่อนัดรับ:</span>
                                                             </p>
-                                                            <p className="font-mono text-emerald-800 font-extrabold text-xs sm:text-sm">
-                                                                • 099-2395756 [อนุชา]<br/>
-                                                                • 091-9251999 [น้าราม]
-                                                            </p>
+                                                            <p className="font-bold">• 099-2395756 [อนุชา]</p>
+                                                            <p className="font-bold">• 091-9251999 [น้าราม]</p>
                                                         </div>
 
                                                         <div className="space-y-2 pt-2 border-t">
@@ -1488,9 +1605,8 @@
                                                         </div>
                                                     </div>
                                                 ) : (
-                                                    <div className="bg-amber-50 p-3 rounded-2xl border border-amber-200 text-amber-900 text-[11px] space-y-1">
-                                                        <p>⚠️ ระบบสั่งซื้อแบบ "เครดิต" สำหรับร้านค้าหรือร้านอาหารที่ได้รับการอนุมัติเท่านั้น</p>
-                                                        <p className="font-bold">📞 ติดต่ออนุมัติสิทธิ์เครดิต: 099-2395756 [อนุชา], 091-9251999 [น้าราม]</p>
+                                                    <div className="bg-amber-50 p-3 rounded-2xl border border-amber-200 text-amber-900 text-[11px]">
+                                                        ⚠️ ระบบสั่งซื้อแบบ "เครดิต" สำหรับร้านค้าหรือร้านอาหารที่ได้รับการอนุมัติเท่านั้น
                                                     </div>
                                                 )}
                                             </div>
@@ -1554,8 +1670,8 @@
 
                                             <div className="text-xs space-y-1">
                                                 <p><strong>ผู้สั่ง:</strong> คุณ {order.customerName} ({order.phone})</p>
+                                                {order.pickupTime && <p className="text-amber-800 font-bold bg-amber-50 p-1.5 rounded-lg border border-amber-200">⏰ เวลานัดรับผักที่ฟาร์ม: {order.pickupTime}</p>}
                                                 <p><strong>รายการ:</strong> {order.items.map(i => `${i.name} x${i.qty} ${i.unit}`).join(', ')}</p>
-                                                {order.pickupTime && <p className="text-amber-800 font-bold">⏰ <strong>เวลานัดรับผัก:</strong> {order.pickupTime}</p>}
                                                 <p className="font-extrabold text-farm-800">ยอดรวม: ฿{order.total} ({order.isCredit ? 'เครดิตร้านค้า' : 'โอนเงิน/PromptPay'})</p>
                                             </div>
 
@@ -1702,13 +1818,119 @@
                                             )}
                                         </div>
 
+                                        {(adminTab === 'active' || adminTab === 'completed') && (
+                                            <div className="space-y-4">
+                                                {orders.filter(o => adminTab === 'completed' ? o.status === 'completed' : (o.status !== 'completed' && o.status !== 'cancelled')).map(order => (
+                                                    <div key={order.id} className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3">
+                                                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b pb-3">
+                                                            <div>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-extrabold text-slate-900 text-sm">{order.docNo}</span>
+                                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${order.isCredit ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                                                                        {order.isCredit ? 'เครดิต' : 'จ่ายสด/โอน'}
+                                                                    </span>
+                                                                </div>
+                                                                <p className="text-slate-400 text-[11px]">{order.date} • คุณ {order.customerName} ({order.phone})</p>
+                                                            </div>
+
+                                                            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                                                                <select 
+                                                                    value={order.status} 
+                                                                    onChange={e => updateOrderStatus(order.id, e.target.value)}
+                                                                    className="text-xs p-2 border border-slate-300 rounded-xl font-bold bg-slate-50 outline-none"
+                                                                >
+                                                                    <option value="pending">⏳ ได้รับออเดอร์</option>
+                                                                    <option value="packing">🥬 กำลังแพ็คผักสด</option>
+                                                                    <option value="shipping">🚚 กำลังจัดส่ง</option>
+                                                                    <option value="completed">✅ ส่งสำเร็จแล้ว</option>
+                                                                </select>
+
+                                                                <div className="flex items-center gap-1">
+                                                                    <button 
+                                                                        onClick={() => setSelectedOrderDetails({ ...order, forceDocType: 'receipt' })} 
+                                                                        className="px-2.5 py-1.5 bg-farm-800 hover:bg-farm-900 text-white text-[11px] font-bold rounded-xl shadow whitespace-nowrap flex items-center gap-1"
+                                                                    >
+                                                                        <span>📄</span>
+                                                                        <span>ใบเสร็จ A4</span>
+                                                                    </button>
+
+                                                                    <button 
+                                                                        onClick={() => setSelectedOrderDetails({ ...order, forceDocType: 'delivery' })} 
+                                                                        className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-[11px] font-bold rounded-xl shadow whitespace-nowrap flex items-center gap-1"
+                                                                    >
+                                                                        <span>📦</span>
+                                                                        <span>ใบส่งของ A4</span>
+                                                                    </button>
+                                                                </div>
+
+                                                                {userRole === 'admin' && (
+                                                                    <button 
+                                                                        type="button"
+                                                                        onClick={() => handleDeleteOrderAdmin(order)}
+                                                                        className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold rounded-xl whitespace-nowrap transition-all"
+                                                                    >
+                                                                        🗑️ ลบ
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="text-xs space-y-1">
+                                                            {order.pickupTime && (
+                                                                <p className="text-amber-900 font-extrabold bg-amber-50 p-2 rounded-xl border border-amber-200">
+                                                                    ⏰ <strong>เวลานัดรับผักที่ฟาร์ม:</strong> {order.pickupTime}
+                                                                </p>
+                                                            )}
+                                                            {order.items && order.items.map((it, idx) => (
+                                                                <div key={idx} className="flex justify-between text-slate-600">
+                                                                    <span>• {it.name} x {it.qty} {it.unit}</span>
+                                                                    <span>฿{it.price * it.qty}</span>
+                                                                </div>
+                                                            ))}
+                                                            <div className="flex justify-between font-extrabold text-slate-900 pt-1 border-t">
+                                                                <span>ยอดเงินรวม</span>
+                                                                <span className="text-farm-800">฿{order.total}</span>
+                                                            </div>
+                                                        </div>
+
+                                                        {order.address && (
+                                                            <p className="text-[11px] text-slate-500 bg-slate-50 p-2 rounded-xl">
+                                                                📍 <strong>ที่อยู่ส่ง:</strong> {order.address} {order.mapsUrl && <a href={order.mapsUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline ml-1">เปิดแผนที่</a>}
+                                                            </p>
+                                                        )}
+
+                                                        <div className="pt-2 border-t flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
+                                                            <div className="w-full sm:w-auto">
+                                                                <label className="font-bold text-slate-700 block mb-0.5">📸 อัปโหลดรูปหลักฐานการจัดส่ง:</label>
+                                                                <input 
+                                                                    type="file" 
+                                                                    accept="image/*" 
+                                                                    onChange={e => {
+                                                                        if (e.target.files && e.target.files[0]) {
+                                                                            handleUploadProofImage(order.id, e.target.files[0]);
+                                                                        }
+                                                                    }}
+                                                                    className="text-[10px] text-slate-500"
+                                                                />
+                                                            </div>
+                                                            {order.slipImage && (
+                                                                <a href={order.slipImage} target="_blank" rel="noreferrer" className="text-blue-600 font-bold hover:underline text-[11px]">
+                                                                    🖼️ ดูสลิปโอนเงินลูกค้า
+                                                                </a>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+
                                         {}
                                         {adminTab === 'inventory' && userRole === 'admin' && (
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                                                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-3">
                                                     <div>
-                                                        <h3 className="font-extrabold text-slate-900 text-base">🥬 จัดการคลังผัก สต็อก ชื่อ ราคา & รูปภาพ (9 รายการ)</h3>
-                                                        <p className="text-slate-500 text-xs">น้ารามสามารถกดแก้ไขชื่อ ราคาปลีก/ส่ง คำอธิบาย หรือปรับจำนวนสต็อกผักสดได้ที่นี่</p>
+                                                        <h3 className="font-extrabold text-slate-900 text-base">🥬 จัดการคลังผัก สต็อก ชื่อ ราคา & รูปภาพ ({products.length} รายการ)</h3>
+                                                        <p className="text-slate-500 text-xs">น้ารามสามารถกดแก้ไขชื่อ ราคาปลีก/ส่ง คำอธิบาย หรือถ่ายรูปผักสดอัปโหลดแทนได้ที่นี่</p>
                                                     </div>
                                                     <button 
                                                         onClick={handleForceSync9Products}
@@ -1805,6 +2027,7 @@
                                             </div>
                                         )}
 
+                                        {}
                                         {adminTab === 'reports' && userRole === 'admin' && (
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                                                 <div className="flex justify-between items-center border-b pb-3">
@@ -1851,16 +2074,23 @@
                                                                     <span className="font-mono font-bold text-slate-900">{ord.docNo}</span>
                                                                     <span className="text-slate-500 ml-2">คุณ {ord.customerName} ({ord.phone})</span>
                                                                 </div>
-                                                                <div className="flex items-center gap-2">
-                                                                    <span className="font-extrabold text-farm-800">฿{ord.total}</span>
+                                                                <div className="flex items-center gap-1 sm:gap-2">
+                                                                    <span className="font-extrabold text-farm-800 mr-1">฿{ord.total}</span>
                                                                     <button 
-                                                                        onClick={() => setSelectedOrderDetails(ord)}
-                                                                        className="px-2.5 py-1 bg-farm-800 text-white font-bold rounded-lg hover:bg-farm-900 transition-all text-[11px]"
+                                                                        onClick={() => setSelectedOrderDetails({ ...ord, forceDocType: 'receipt' })}
+                                                                        className="px-2 py-1 bg-farm-800 text-white font-bold rounded-lg hover:bg-farm-900 transition-all text-[11px]"
                                                                     >
-                                                                        📄 ออกบิล A4
+                                                                        📄 ใบเสร็จ
+                                                                    </button>
+                                                                    <button 
+                                                                        onClick={() => setSelectedOrderDetails({ ...ord, forceDocType: 'delivery' })}
+                                                                        className="px-2 py-1 bg-slate-800 text-white font-bold rounded-lg hover:bg-slate-900 transition-all text-[11px]"
+                                                                    >
+                                                                        📦 ใบส่งของ
                                                                     </button>
                                                                     {userRole === 'admin' && (
                                                                         <button 
+                                                                            type="button"
                                                                             onClick={() => handleDeleteOrderAdmin(ord)}
                                                                             className="px-2 py-1 bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 font-bold rounded-lg text-[11px]"
                                                                         >
@@ -1875,6 +2105,7 @@
                                             </div>
                                         )}
 
+                                        {}
                                         {adminTab === 'settings' && userRole === 'admin' && (
                                             <div className="space-y-6">
                                                 <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
@@ -2088,6 +2319,62 @@
                                                         </div>
 
                                                         <div>
+                                                            <label className="font-bold text-slate-700 block mb-1">📸 รูปโลโก้เกื้อบุญฟาร์ม (แสดงที่เมนูบนสุด & ใบเสร็จ A4)</label>
+                                                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 bg-slate-50 p-3 rounded-xl border mb-3">
+                                                                {farmLogoImage ? (
+                                                                    <div className="relative flex-shrink-0">
+                                                                        <img src={farmLogoImage} alt="Logo Preview" className="w-16 h-16 object-contain rounded-xl border bg-white p-1 shadow-sm" />
+                                                                        <button 
+                                                                            type="button" 
+                                                                            onClick={handleClearFarmLogo}
+                                                                            className="mt-1 text-[10px] text-rose-600 font-bold block hover:underline"
+                                                                        >
+                                                                            🗑️ ลบรูปโลโก้
+                                                                        </button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="w-16 h-16 bg-slate-200 rounded-xl flex items-center justify-center text-slate-400 text-xs font-bold flex-shrink-0">ไม่มีโลโก้</div>
+                                                                )}
+                                                                <div className="flex-1 w-full space-y-2">
+                                                                    <div>
+                                                                        <label className="text-[10px] text-slate-500 block mb-0.5">เลือกรูปไฟล์จากเครื่อง (มือถือ/คอม):</label>
+                                                                        <input 
+                                                                            type="file" 
+                                                                            accept="image/*"
+                                                                            onChange={(e) => {
+                                                                                const file = e.target.files && e.target.files[0];
+                                                                                if (file) {
+                                                                                    setFarmLogoFile(file);
+                                                                                    const reader = new FileReader();
+                                                                                    reader.onload = (ev) => {
+                                                                                        setFarmLogoImage(ev.target.result);
+                                                                                        setLogoLoadFailed(false);
+                                                                                    };
+                                                                                    reader.readAsDataURL(file);
+                                                                                }
+                                                                            }}
+                                                                            className="w-full text-xs text-slate-500"
+                                                                        />
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="text-[10px] text-slate-500 block mb-0.5">หรือวางลิงก์รูปภาพโลโก้ (Image URL):</label>
+                                                                        <input 
+                                                                            type="url" 
+                                                                            placeholder="https://..." 
+                                                                            value={farmLogoFile ? '' : farmLogoImage}
+                                                                            onChange={(e) => {
+                                                                                setFarmLogoFile(null);
+                                                                                setFarmLogoImage(e.target.value);
+                                                                                setLogoLoadFailed(false);
+                                                                            }}
+                                                                            className="w-full p-2 border rounded-xl bg-white outline-none text-xs focus:border-farm-800"
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div>
                                                             <label className="font-bold text-slate-700 block mb-1">📸 รูปภาพ QR Code พร้อมเพย์หน้าร้านค้า (คมชัด ไร้การบีบอัด)</label>
                                                             <div className="flex items-center gap-3 bg-slate-50 p-2.5 rounded-xl border">
                                                                 {customQrImage ? (
@@ -2132,101 +2419,6 @@
                                                 </div>
                                             </div>
                                         )}
-
-                                        {}
-                                        {(adminTab === 'active' || adminTab === 'completed') && (
-                                            <div className="space-y-4">
-                                                {orders.filter(o => adminTab === 'completed' ? o.status === 'completed' : (o.status !== 'completed' && o.status !== 'cancelled')).map(order => (
-                                                    <div key={order.id} className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3">
-                                                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b pb-3">
-                                                            <div>
-                                                                <div className="flex items-center gap-2">
-                                                                    <span className="font-extrabold text-slate-900 text-sm">{order.docNo}</span>
-                                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${order.isCredit ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
-                                                                        {order.isCredit ? 'เครดิต' : 'จ่ายสด/โอน'}
-                                                                    </span>
-                                                                </div>
-                                                                <p className="text-slate-400 text-[11px]">{order.date} • คุณ {order.customerName} ({order.phone})</p>
-                                                            </div>
-
-                                                            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                                                                <select 
-                                                                    value={order.status} 
-                                                                    onChange={e => updateOrderStatus(order.id, e.target.value)}
-                                                                    className="text-xs p-2 border border-slate-300 rounded-xl font-bold bg-slate-50 outline-none"
-                                                                >
-                                                                    <option value="pending">⏳ ได้รับออเดอร์</option>
-                                                                    <option value="packing">🥬 กำลังแพ็คผักสด</option>
-                                                                    <option value="shipping">🚚 กำลังจัดส่ง</option>
-                                                                    <option value="completed">✅ ส่งสำเร็จแล้ว</option>
-                                                                </select>
-
-                                                                <button 
-                                                                    onClick={() => setSelectedOrderDetails(order)} 
-                                                                    className="px-3 py-2 bg-farm-800 hover:bg-farm-900 text-white text-xs font-bold rounded-xl shadow whitespace-nowrap"
-                                                                >
-                                                                    📄 พิมพ์บิล A4
-                                                                </button>
-
-                                                                {userRole === 'admin' && (
-                                                                    <button 
-                                                                        onClick={() => handleDeleteOrderAdmin(order)}
-                                                                        className="px-2.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold rounded-xl whitespace-nowrap transition-all"
-                                                                    >
-                                                                        🗑️ ลบ
-                                                                    </button>
-                                                                )}
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="text-xs space-y-1">
-                                                            {order.items && order.items.map((it, idx) => (
-                                                                <div key={idx} className="flex justify-between text-slate-600">
-                                                                    <span>• {it.name} x {it.qty} {it.unit}</span>
-                                                                    <span>฿{it.price * it.qty}</span>
-                                                                </div>
-                                                            ))}
-                                                            {order.pickupTime && (
-                                                                <p className="text-amber-900 font-bold bg-amber-50 p-1.5 rounded-lg border border-amber-200 mt-1">
-                                                                    ⏰ <strong>เวลานัดรับผักที่ฟาร์ม:</strong> {order.pickupTime}
-                                                                </p>
-                                                            )}
-                                                            <div className="flex justify-between font-extrabold text-slate-900 pt-1 border-t">
-                                                                <span>ยอดเงินรวม</span>
-                                                                <span className="text-farm-800">฿{order.total}</span>
-                                                            </div>
-                                                        </div>
-
-                                                        {order.address && (
-                                                            <p className="text-[11px] text-slate-500 bg-slate-50 p-2 rounded-xl">
-                                                                📍 <strong>ที่อยู่ส่ง:</strong> {order.address} {order.mapsUrl && <a href={order.mapsUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline ml-1">เปิดแผนที่</a>}
-                                                            </p>
-                                                        )}
-
-                                                        <div className="pt-2 border-t flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
-                                                            <div className="w-full sm:w-auto">
-                                                                <label className="font-bold text-slate-700 block mb-0.5">📸 อัปโหลดรูปหลักฐานการจัดส่ง (จำเป็นก่อนจบงาน):</label>
-                                                                <input 
-                                                                    type="file" 
-                                                                    accept="image/*" 
-                                                                    onChange={e => {
-                                                                        if (e.target.files && e.target.files[0]) {
-                                                                            handleUploadProofImage(order.id, e.target.files[0]);
-                                                                        }
-                                                                    }}
-                                                                    className="text-[10px] text-slate-500"
-                                                                />
-                                                            </div>
-                                                            {order.slipImage && (
-                                                                <a href={order.slipImage} target="_blank" rel="noreferrer" className="text-blue-600 font-bold hover:underline text-[11px]">
-                                                                    🖼️ ดูสลิปโอนเงินลูกค้า
-                                                                </a>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
                                     </div>
                                 )}
                             </div>
@@ -2237,14 +2429,40 @@
                     {selectedOrderDetails && (
                         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
                             <div className="bg-white w-full max-w-3xl rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl my-auto">
-                                <div className="flex justify-between items-center no-print border-b pb-3">
-                                    <h3 className="font-extrabold text-slate-900 text-base">📄 ตัวอย่างเอกสาร A4</h3>
-                                    <div className="flex flex-wrap gap-2">
+                                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center no-print border-b pb-3 gap-3">
+                                    <div className="space-y-1">
+                                        <h3 className="font-extrabold text-slate-900 text-base">📄 ตัวอย่างเอกสาร A4</h3>
+                                        <div className="flex bg-slate-100 p-1 rounded-xl text-xs font-bold">
+                                            <button 
+                                                type="button"
+                                                onClick={() => setSelectedOrderDetails({ ...selectedOrderDetails, forceDocType: 'receipt' })}
+                                                className={`px-3 py-1 rounded-lg transition-all ${
+                                                    (selectedOrderDetails.forceDocType ? selectedOrderDetails.forceDocType === 'receipt' : !selectedOrderDetails.isCredit)
+                                                    ? 'bg-farm-800 text-white shadow-sm' 
+                                                    : 'text-slate-600 hover:text-slate-900'
+                                                }`}
+                                            >
+                                                📄 ใบเสร็จรับเงิน
+                                            </button>
+                                            <button 
+                                                type="button"
+                                                onClick={() => setSelectedOrderDetails({ ...selectedOrderDetails, forceDocType: 'delivery' })}
+                                                className={`px-3 py-1 rounded-lg transition-all ${
+                                                    (selectedOrderDetails.forceDocType ? selectedOrderDetails.forceDocType === 'delivery' : selectedOrderDetails.isCredit)
+                                                    ? 'bg-slate-800 text-white shadow-sm' 
+                                                    : 'text-slate-600 hover:text-slate-900'
+                                                }`}
+                                            >
+                                                📦 ใบส่งสินค้า / ใบแจ้งหนี้
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                                         <button 
                                             onClick={async () => {
                                                 const element = document.getElementById('printable-area');
                                                 if (!element) return;
-                                                
                                                 const isLineBrowser = /LINE/i.test(navigator.userAgent);
                                                 
                                                 try {
@@ -2272,12 +2490,12 @@
                                                     setTimeout(() => window.print(), 800);
                                                 }
                                             }} 
-                                            className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow flex items-center gap-1.5 transition-all"
+                                            className="flex-1 sm:flex-initial px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow flex items-center justify-center gap-1.5 transition-all"
                                         >
                                             <span>📥</span>
                                             <span>บันทึกไฟล์ PDF</span>
                                         </button>
-                                        <button onClick={() => window.print()} className="px-4 py-2 bg-farm-800 hover:bg-farm-900 text-white font-bold text-xs rounded-xl shadow flex items-center gap-1.5 transition-all">
+                                        <button onClick={() => window.print()} className="flex-1 sm:flex-initial px-4 py-2 bg-farm-800 hover:bg-farm-900 text-white font-bold text-xs rounded-xl shadow flex items-center justify-center gap-1.5 transition-all">
                                             <span>🖨️</span>
                                             <span>สั่งพิมพ์ (Print)</span>
                                         </button>
@@ -2292,10 +2510,15 @@
                                     return (
                                         <div id="printable-area" className="space-y-6 text-slate-800 text-xs">
                                             <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4">
-                                                <div>
-                                                    <h1 className="text-xl font-extrabold text-slate-900">{farmName}</h1>
-                                                    <p className="mt-1">{farmAddress}</p>
-                                                    <p>โทร: {farmPhone} | เลขประจำตัวผู้เสียภาษี: {taxId}</p>
+                                                <div className="flex items-start gap-3">
+                                                    {(farmLogoImage && !logoLoadFailed) && (
+                                                        <img src={farmLogoImage} alt="Logo" className="w-16 h-16 object-contain rounded-xl border p-1 bg-white" onError={() => setLogoLoadFailed(true)} />
+                                                    )}
+                                                    <div>
+                                                        <h1 className="text-xl font-extrabold text-slate-900">{farmName}</h1>
+                                                        <p className="mt-1">{farmAddress}</p>
+                                                        <p>โทร: {farmPhone} | เลขประจำตัวผู้เสียภาษี: {taxId}</p>
+                                                    </div>
                                                 </div>
                                                 <div className="text-right">
                                                     <h2 className="text-lg font-black text-slate-900">
@@ -2310,7 +2533,7 @@
                                                 <p><strong>ชื่อลูกค้า / ร้านค้า:</strong> คุณ {selectedOrderDetails.customerName}</p>
                                                 <p><strong>เบอร์โทรศัพท์:</strong> {selectedOrderDetails.phone}</p>
                                                 <p><strong>ที่อยู่จัดส่ง:</strong> {selectedOrderDetails.address}</p>
-                                                {selectedOrderDetails.pickupTime && <p className="font-bold text-amber-900">⏰ <strong>เวลานัดรับผัก:</strong> {selectedOrderDetails.pickupTime}</p>}
+                                                {selectedOrderDetails.pickupTime && <p className="text-amber-800 font-bold"><strong>เวลานัดรับที่ฟาร์ม:</strong> {selectedOrderDetails.pickupTime}</p>}
                                             </div>
 
                                             <table className="w-full text-left border-collapse">
@@ -2384,7 +2607,7 @@
                         </div>
                     )}
 
-                    {/* Product Edit Modal */}
+                    {}
                     {editingProductModal && (
                         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
                             <div className="bg-white rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl border my-auto">
@@ -2522,7 +2745,7 @@
                         </div>
                     )}
 
-                    {/* Bottom Mobile Navigation */}
+                    {}
                     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 md:hidden z-20">
                         <div className="grid grid-cols-3 text-center py-2 text-[11px] font-bold">
                             <button onClick={() => setView('store')} className={`space-y-0.5 ${view === 'store' ? 'text-farm-800 font-extrabold' : 'text-slate-400'}`}>
