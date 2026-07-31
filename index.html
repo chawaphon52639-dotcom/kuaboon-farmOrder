@@ -99,6 +99,7 @@
         const db = firebase.firestore();
         const storage = firebase.storage();
 
+        // Helper for precise float calculations (0.5 kg rounding)
         const roundStep = (num) => Math.round((num + Number.EPSILON) * 10) / 10;
 
         async function compressImageToBlob(fileOrDataUrl, maxWidth = 800, maxHeight = 800, quality = 0.8) {
@@ -177,9 +178,8 @@
                 const ref = storage.ref().child(filename);
                 
                 const uploadTask = ref.put(blob, { contentType: 'image/jpeg' });
-                // ขยายเวลา Timeout เป็น 15 วินาที
                 const timeoutPromise = new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error("Storage Timeout")), 15000)
+                    setTimeout(() => reject(new Error("Storage Timeout")), 4000)
                 );
                 
                 const snapshot = await Promise.race([uploadTask, timeoutPromise]);
@@ -255,6 +255,7 @@
             const [isSubmitting, setIsSubmitting] = React.useState(false);
             const [isFirebaseConnected, setIsFirebaseConnected] = React.useState(false);
 
+            // Checkout state
             const [custName, setCustName] = React.useState('');
             const [custPhone, setCustPhone] = React.useState('');
             const [custAddress, setCustAddress] = React.useState('');
@@ -263,23 +264,27 @@
             const [slipPreview, setSlipPreview] = React.useState('');
             const [slipFile, setSlipFile] = React.useState(null);
 
+            // Notification Modal State
             const [toastModal, setToastModal] = React.useState({ show: false, title: '', message: '', type: 'info' });
 
+            // Backoffice State
             const [adminPin, setAdminPin] = React.useState('');
             const [isAdminLoggedIn, setIsAdminLoggedIn] = React.useState(false);
-            const [userRole, setUserRole] = React.useState(null);
+            const [userRole, setUserRole] = React.useState(null); // 'admin' | 'staff'
             const [activeStaffName, setActiveStaffName] = React.useState('');
             const [masterAdminPin, setMasterAdminPin] = React.useState('1234');
             const [staffList, setStaffList] = React.useState([
                 { id: 1, name: 'พนักงานแพ็คผัก 1', pin: '1111' },
                 { id: 2, name: 'พนักงานจัดส่ง 2', pin: '2222' }
             ]);
-            const [adminTab, setAdminTab] = React.useState('active');
+            const [adminTab, setAdminTab] = React.useState('active'); // 'active' | 'completed' | 'inventory' | 'reports' | 'settings'
 
+            // Editing Wholesale Customer State
             const [editingWholesaleId, setEditingWholesaleId] = React.useState(null);
             const [editWholesaleName, setEditWholesaleName] = React.useState('');
             const [editWholesalePhone, setEditWholesalePhone] = React.useState('');
 
+            // Settings State
             const [farmName, setFarmName] = React.useState('เกื้อบุญฟาร์ม (Kuaboon Farm)');
             const [taxId, setTaxId] = React.useState('0105563012345');
             const [farmAddress, setFarmAddress] = React.useState('123 หมู่ 4 ต.ผักสด อ.เมือง จ.นครราชสีมา 30000');
@@ -290,6 +295,7 @@
             const [customQrFile, setCustomQrFile] = React.useState(null);
             const [isSavingSettings, setIsSavingSettings] = React.useState(false);
 
+            // Whitelist & Staff Input State
             const [wholesaleWhitelist, setWholesaleWhitelist] = React.useState([
                 { id: '1', phone: '0891234567', name: 'ร้านสลัดคุณน้อง' },
                 { id: '2', phone: '0819876543', name: 'ร้านอาหารเกื้อบุญ' }
@@ -299,9 +305,11 @@
             const [newStaffName, setNewStaffName] = React.useState('');
             const [newStaffPin, setNewStaffPin] = React.useState('');
 
+            // Modals State
             const [selectedOrderDetails, setSelectedOrderDetails] = React.useState(null);
             const [showCartDrawer, setShowCartDrawer] = React.useState(false);
 
+            // Refs for event listeners & order detection
             const audioCtxRef = React.useRef(null);
             const viewRef = React.useRef(view);
             const isAdminLoggedInRef = React.useRef(isAdminLoggedIn);
@@ -373,11 +381,10 @@
                     const existingIds = new Set(items.map(i => i.id));
                     const missingInitial = INITIAL_PRODUCTS.filter(p => !existingIds.has(p.id));
 
-                    // เพิ่มเฉพาะรายการที่ยังไม่มีใน Firestore เท่านั้น
                     if (missingInitial.length > 0) {
                         try {
                             const batch = db.batch();
-                            missingInitial.forEach(p => {
+                            INITIAL_PRODUCTS.forEach(p => {
                                 const ref = db.collection('products').doc(p.id);
                                 batch.set(ref, p, { merge: true });
                             });
@@ -521,7 +528,7 @@
                         () => showToast('📍 ไม่สามารถดึง GPS ได้', 'กรุณาวางลิงก์ Google Maps โดยตรงในช่องใส่พิกัด', 'error')
                     );
                 } else {
-                    showToast('⚠️ ไม่รองรับ GPS', 'เบราว์เซอร์ไม่รองรับการดึงพิกัดอัตโนมัติ', 'error');
+                    showToast('⚠️ ไม่รองรับ GPS', 'เบราว์เซอร์ของคุณน้าไม่รองรับการดึงพิกัดอัตโนมัติ', 'error');
                 }
             };
 
@@ -578,6 +585,7 @@
 
                     await db.collection('orders').doc(orderId).set(newOrder);
 
+                    // Update stock
                     const batch = db.batch();
                     cart.forEach(cItem => {
                         const pRef = db.collection('products').doc(cItem.id);
@@ -589,6 +597,7 @@
                     });
                     await batch.commit();
 
+                    // Clear customer inputs & cart cleanly so next order starts fresh
                     setCustName('');
                     setCustPhone('');
                     setCustAddress('');
@@ -946,6 +955,7 @@
                         </div>
                     </header>
 
+                    {/* LINE In-App Browser Warning Banner */}
                     {/LINE/i.test(navigator.userAgent) && (
                         <div className="bg-amber-500 text-slate-900 px-4 py-2 text-xs font-bold text-center border-b border-amber-600 shadow-inner flex items-center justify-center gap-2">
                             <span className="text-base">📱</span>
@@ -953,6 +963,7 @@
                         </div>
                     )}
 
+                    {/* Notification Toast Modal */}
                     {toastModal.show && (
                         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
                             <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl border text-center">
@@ -977,8 +988,10 @@
                     )}
 
                     <main className="max-w-6xl mx-auto px-4 pt-4">
+                        {/* STOREFRONT VIEW */}
                         {view === 'store' && (
                             <div className="space-y-6">
+                                {/* Top Banner */}
                                 <div className="bg-gradient-to-r from-farm-800 to-emerald-600 text-white p-6 rounded-3xl shadow-lg relative overflow-hidden">
                                     <div className="relative z-10 space-y-2 max-w-xl">
                                         <div className="flex flex-wrap items-center gap-2">
@@ -997,6 +1010,7 @@
                                     <div className="absolute -right-6 -bottom-10 opacity-20 text-9xl">🥗</div>
                                 </div>
 
+                                {/* Customer Tier Picker */}
                                 <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
                                     <div>
                                         <h3 className="font-extrabold text-slate-900 text-sm">👤 เลือกระดับประเภทลูกค้า:</h3>
@@ -1028,6 +1042,7 @@
                                     </div>
                                 </div>
 
+                                {/* Category Tabs */}
                                 <div className="flex border-b border-slate-200 gap-2 overflow-x-auto hide-scrollbar">
                                     <button 
                                         onClick={() => setSelectedCategory('all')}
@@ -1049,6 +1064,7 @@
                                     </button>
                                 </div>
 
+                                {/* Products Grid */}
                                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
                                     {products
                                         .filter(p => selectedCategory === 'all' || p.category === selectedCategory)
@@ -1141,6 +1157,7 @@
                             </div>
                         )}
 
+                        {/* Floating Cart Button */}
                         {cart.length > 0 && view === 'store' && (
                             <div className="fixed bottom-16 sm:bottom-6 right-4 left-4 max-w-md mx-auto z-30">
                                 <button 
@@ -1163,6 +1180,7 @@
                             </div>
                         )}
 
+                        {/* Cart Drawer & Checkout */}
                         {showCartDrawer && (
                             <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex justify-end">
                                 <div className="bg-white w-full max-w-lg h-full overflow-y-auto p-5 space-y-6 flex flex-col justify-between">
@@ -1324,6 +1342,7 @@
                             </div>
                         )}
 
+                        {/* ORDER TRACKING VIEW */}
                         {view === 'tracking' && (
                             <div className="space-y-4 max-w-3xl mx-auto">
                                 <h2 className="font-extrabold text-slate-900 text-lg">🚚 ติดตามสถานะออเดอร์จัดส่ง</h2>
@@ -1421,6 +1440,7 @@
                             </div>
                         )}
 
+                        {/* BACKOFFICE VIEW */}
                         {view === 'backoffice' && (
                             <div className="space-y-6">
                                 {!isAdminLoggedIn ? (
@@ -1450,6 +1470,7 @@
                                     </div>
                                 ) : (
                                     <div className="space-y-5">
+                                        {/* Backoffice Header */}
                                         <div className="bg-slate-900 text-white p-4 rounded-3xl flex flex-wrap items-center justify-between gap-3">
                                             <div>
                                                 <span className="bg-farm-500 text-white text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase">
@@ -1474,6 +1495,7 @@
                                             </div>
                                         </div>
 
+                                        {/* Backoffice Navigation Tabs */}
                                         <div className="flex border-b border-slate-200 gap-2 overflow-x-auto hide-scrollbar">
                                             <button 
                                                 onClick={() => setAdminTab('active')}
@@ -1512,6 +1534,7 @@
                                             )}
                                         </div>
 
+                                        {/* Backoffice Sub-tab: Inventory */}
                                         {adminTab === 'inventory' && userRole === 'admin' && (
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                                                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-3">
@@ -1580,6 +1603,7 @@
                                             </div>
                                         )}
 
+                                        {/* Backoffice Sub-tab: Reports */}
                                         {adminTab === 'reports' && userRole === 'admin' && (
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                                                 <div className="flex justify-between items-center border-b pb-3">
@@ -1650,8 +1674,10 @@
                                             </div>
                                         )}
 
+                                        {/* Backoffice Sub-tab: Settings */}
                                         {adminTab === 'settings' && userRole === 'admin' && (
                                             <div className="space-y-6">
+                                                {/* Staff Management Card */}
                                                 <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
                                                     <div className="border-b pb-3">
                                                         <h3 className="font-extrabold text-slate-900 text-base">👷 จัดการบัญชีผู้ใช้งานพนักงาน & รหัส PIN เข้าระบบ</h3>
@@ -1707,6 +1733,7 @@
                                                     </div>
                                                 </div>
 
+                                                {/* Wholesale Whitelist Card */}
                                                 <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
                                                     <div className="border-b pb-3">
                                                         <h3 className="font-extrabold text-slate-900 text-base">🏪 จัดการรายชื่อลูกค้าราคาพิเศษ / ร้านอาหาร / Shop</h3>
@@ -1795,6 +1822,7 @@
                                                     </div>
                                                 </div>
 
+                                                {/* Farm Details Form Card */}
                                                 <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
                                                     <div className="border-b pb-3">
                                                         <h3 className="font-extrabold text-slate-900 text-base">🏡 ตั้งค่าข้อมูลเกื้อบุญฟาร์ม & การชำระเงิน</h3>
@@ -1908,6 +1936,7 @@
                                             </div>
                                         )}
 
+                                        {/* Backoffice Sub-tab: Orders Active / Completed */}
                                         {(adminTab === 'active' || adminTab === 'completed') && (
                                             <div className="space-y-4">
                                                 {orders.filter(o => adminTab === 'completed' ? o.status === 'completed' : (o.status !== 'completed' && o.status !== 'cancelled')).map(order => (
@@ -2002,6 +2031,7 @@
                         )}
                     </main>
 
+                    {/* Document Preview Modal */}
                     {selectedOrderDetails && (
                         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
                             <div className="bg-white w-full max-w-3xl rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl my-auto">
@@ -2114,7 +2144,6 @@
                                             </div>
 
                                             <div className="grid grid-cols-3 gap-4 pt-10 text-center">
-                                                <div className="space grid-cols-3 gap-4 pt-10 text-center">
                                                 <div className="space-y-6">
                                                     <div className="border-b border-dashed border-slate-400 w-4/5 mx-auto"></div>
                                                     <p className="text-[11px] font-bold">
@@ -2152,6 +2181,7 @@
                         </div>
                     )}
 
+                    {/* Mobile Navigation Bar */}
                     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 md:hidden z-20">
                         <div className="grid grid-cols-3 text-center py-2 text-[11px] font-bold">
                             <button onClick={() => setView('store')} className={`space-y-0.5 ${view === 'store' ? 'text-farm-800 font-extrabold' : 'text-slate-400'}`}>
@@ -2176,3 +2206,6 @@
         root.render(<App />);
     </script>
 </body>
+</html>
+
+
