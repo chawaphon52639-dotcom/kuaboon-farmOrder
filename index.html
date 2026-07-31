@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>เกื้อบุญฟาร์ม - ระบบสั่งผักสดและบริหารจัดการคลาวด์ (Kuaboon Master v1.2)</title>
+    <title>เกื้อบุญฟาร์ม - ระบบสั่งผักสดและบริหารจัดการคลาวด์ (Kuaboon Master v1.3)</title>
     
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -155,7 +155,7 @@
                     } else {
                         if (height > maxHeight) {
                             width = Math.round((width * maxHeight) / height);
-                            width = maxHeight;
+                            height = maxHeight;
                         }
                     }
 
@@ -190,7 +190,8 @@
 
         async function uploadBlobToStorage(fileOrDataUrl, folderName, options = {}) {
             if (!fileOrDataUrl) return null;
-            if (typeof fileOrDataUrl === 'string' && (fileOrDataUrl.startsWith('http') || fileOrDataUrl.startsWith('data:image/svg'))) {
+            // If already a valid web URL, return as-is
+            if (typeof fileOrDataUrl === 'string' && fileOrDataUrl.startsWith('http')) {
                 return fileOrDataUrl;
             }
 
@@ -198,7 +199,7 @@
             let dataUrlFallback = null;
 
             try {
-                const compressed = await compressImageToBlob(fileOrDataUrl, options.maxWidth || 600, options.maxHeight || 600, options.quality || 0.8);
+                const compressed = await compressImageToBlob(fileOrDataUrl, options.maxWidth || 800, options.maxHeight || 800, options.quality || 0.8);
                 blob = compressed.blob;
                 dataUrlFallback = compressed.dataUrl;
             } catch (err) {
@@ -211,15 +212,16 @@
                 const ref = storage.ref().child(filename);
                 
                 const uploadTask = ref.put(blob, { contentType: 'image/jpeg' });
+                // Timeout increased to 30 seconds for mobile connections
                 const timeoutPromise = new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error("Storage Timeout")), 4000)
+                    setTimeout(() => reject(new Error("Storage Timeout")), 30000)
                 );
                 
                 const snapshot = await Promise.race([uploadTask, timeoutPromise]);
                 const downloadUrl = await snapshot.ref.getDownloadURL();
                 return downloadUrl;
             } catch (storageError) {
-                console.warn("Storage upload fallback used inline DataURL:", storageError);
+                console.warn("Storage upload warning:", storageError);
                 return dataUrlFallback || (typeof fileOrDataUrl === 'string' ? fileOrDataUrl : null);
             }
         }
@@ -295,7 +297,7 @@
             // Backoffice State
             const [adminPin, setAdminPin] = React.useState('');
             const [isAdminLoggedIn, setIsAdminLoggedIn] = React.useState(false);
-            const [userRole, setUserRole] = React.useState(null); // 'admin' | 'staff'
+            const [userRole, setUserRole] = React.useState(null);
             const [activeStaffName, setActiveStaffName] = React.useState('');
             const [masterAdminPin, setMasterAdminPin] = React.useState('1234');
             const [staffList, setStaffList] = React.useState([
@@ -1024,13 +1026,12 @@
                 
                 setIsUploadingProdImg(true);
                 try {
-                    showToast('⏳ กำลังบันทึกข้อมูลผัก...', 'กำลังบีบอัดและบันทึกรูปภาพผักสดลงระบบ...', 'info');
+                    showToast('⏳ กำลังบันทึกข้อมูลผัก...', 'กำลังอัปโหลดรูปภาพขึ้น Firebase Cloud Storage...', 'info');
                     let newUrl = prodImagePreview;
                     
-                    // Convert uploaded image file to compressed Base64 DataURL (Same as Logo & QR Code)
+                    // Direct upload of product image file to Firebase Storage -> Get permanent HTTPS download URL
                     if (prodImageFile) {
-                        const compressed = await compressImageToBlob(prodImageFile, 600, 600, 0.75);
-                        newUrl = compressed.dataUrl || prodImagePreview;
+                        newUrl = await uploadBlobToStorage(prodImageFile, 'product_images', { maxWidth: 600, maxHeight: 600, quality: 0.8 });
                     }
 
                     if (!newUrl) {
@@ -1052,7 +1053,7 @@
                         await db.collection('products').doc(editingProductModal.id).set(updatedData, { merge: true });
                     }
 
-                    showToast('🎉 บันทึกข้อมูลผักสำเร็จ!', `อัปเดตรูปภาพและข้อมูล "${prodName.trim()}" ถาวรเรียบร้อยแล้ว`, 'success');
+                    showToast('🎉 บันทึกข้อมูลผักสำเร็จ!', `อัปโหลดรูปภาพและบันทึกข้อมูล "${prodName.trim()}" ลงคลาวด์ถาวรเรียบร้อยแล้ว`, 'success');
                     setEditingProductModal(null);
                     setProdImagePreview('');
                     setProdImageFile(null);
@@ -1138,6 +1139,7 @@
                         </div>
                     </header>
 
+                    {/* LINE In-App Browser Warning Banner */}
                     {/LINE/i.test(navigator.userAgent) && (
                         <div className="bg-amber-500 text-slate-900 px-4 py-2 text-xs font-bold text-center border-b border-amber-600 shadow-inner flex items-center justify-center gap-2">
                             <span className="text-base">📱</span>
@@ -1145,7 +1147,7 @@
                         </div>
                     )}
 
-                    {/* Notification Modal */}
+                    {/* Notification Toast Modal */}
                     {toastModal.show && (
                         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
                             <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl border text-center">
@@ -1238,8 +1240,10 @@
                     )}
 
                     <main className="max-w-6xl mx-auto px-4 pt-4">
+                        {/* STOREFRONT VIEW */}
                         {view === 'store' && (
                             <div className="space-y-6">
+                                {/* Top Banner */}
                                 <div className="bg-gradient-to-r from-farm-800 to-emerald-600 text-white p-6 rounded-3xl shadow-lg relative overflow-hidden">
                                     <div className="relative z-10 space-y-2 max-w-xl">
                                         <div className="flex flex-wrap items-center gap-2">
@@ -1268,6 +1272,7 @@
                                     <div className="absolute -right-6 -bottom-10 opacity-20 text-9xl">🥗</div>
                                 </div>
 
+                                {/* Customer Tier Picker */}
                                 <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
                                     <div>
                                         <h3 className="font-extrabold text-slate-900 text-sm">👤 เลือกระดับประเภทลูกค้า:</h3>
@@ -1299,6 +1304,7 @@
                                     </div>
                                 </div>
 
+                                {/* Category Tabs */}
                                 <div className="flex border-b border-slate-200 gap-2 overflow-x-auto hide-scrollbar">
                                     <button 
                                         onClick={() => setSelectedCategory('all')}
@@ -1320,6 +1326,7 @@
                                     </button>
                                 </div>
 
+                                {/* Products Grid */}
                                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
                                     {products
                                         .filter(p => selectedCategory === 'all' || p.category === selectedCategory)
@@ -1637,6 +1644,7 @@
                             </div>
                         )}
 
+                        {/* ORDER TRACKING VIEW */}
                         {view === 'tracking' && (
                             <div className="space-y-4 max-w-3xl mx-auto">
                                 <h2 className="font-extrabold text-slate-900 text-lg">🚚 ติดตามสถานะออเดอร์จัดส่ง</h2>
@@ -1735,6 +1743,7 @@
                             </div>
                         )}
 
+                        {/* BACKOFFICE VIEW */}
                         {view === 'backoffice' && (
                             <div className="space-y-6">
                                 {!isAdminLoggedIn ? (
@@ -1764,6 +1773,7 @@
                                     </div>
                                 ) : (
                                     <div className="space-y-5">
+                                        {/* Backoffice Header */}
                                         <div className="bg-slate-900 text-white p-4 rounded-3xl flex flex-wrap items-center justify-between gap-3">
                                             <div>
                                                 <span className="bg-farm-500 text-white text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase">
@@ -1788,6 +1798,7 @@
                                             </div>
                                         </div>
 
+                                        {/* Backoffice Navigation Tabs */}
                                         <div className="flex border-b border-slate-200 gap-2 overflow-x-auto hide-scrollbar">
                                             <button 
                                                 onClick={() => setAdminTab('active')}
@@ -1818,7 +1829,7 @@
                                                     </button>
                                                     <button 
                                                         onClick={() => setAdminTab('settings')}
-                                                        className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${adminTab === 'settings' ? 'border-transparent text-slate-500' : 'border-transparent text-slate-500'}`}
+                                                        className={`pb-3 px-4 text-xs font-extrabold border-b-2 whitespace-nowrap ${adminTab === 'settings' ? 'border-farm-800 text-farm-800' : 'border-transparent text-slate-500'}`}
                                                     >
                                                         ⚙️ ตั้งค่าฟาร์ม & ร้านค้า
                                                     </button>
@@ -1826,112 +1837,7 @@
                                             )}
                                         </div>
 
-                                        {(adminTab === 'active' || adminTab === 'completed') && (
-                                            <div className="space-y-4">
-                                                {orders.filter(o => adminTab === 'completed' ? o.status === 'completed' : (o.status !== 'completed' && o.status !== 'cancelled')).map(order => (
-                                                    <div key={order.id} className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3">
-                                                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b pb-3">
-                                                            <div>
-                                                                <div className="flex items-center gap-2">
-                                                                    <span className="font-extrabold text-slate-900 text-sm">{order.docNo}</span>
-                                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${order.isCredit ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
-                                                                        {order.isCredit ? 'เครดิต' : 'จ่ายสด/โอน'}
-                                                                    </span>
-                                                                </div>
-                                                                <p className="text-slate-400 text-[11px]">{order.date} • คุณ {order.customerName} ({order.phone})</p>
-                                                            </div>
-
-                                                            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                                                                <select 
-                                                                    value={order.status} 
-                                                                    onChange={e => updateOrderStatus(order.id, e.target.value)}
-                                                                    className="text-xs p-2 border border-slate-300 rounded-xl font-bold bg-slate-50 outline-none"
-                                                                >
-                                                                    <option value="pending">⏳ ได้รับออเดอร์</option>
-                                                                    <option value="packing">🥬 กำลังแพ็คผักสด</option>
-                                                                    <option value="shipping">🚚 กำลังจัดส่ง</option>
-                                                                    <option value="completed">✅ ส่งสำเร็จแล้ว</option>
-                                                                </select>
-
-                                                                <div className="flex items-center gap-1">
-                                                                    <button 
-                                                                        onClick={() => setSelectedOrderDetails({ ...order, forceDocType: 'receipt', isBackoffice: true })} 
-                                                                        className="px-2.5 py-1.5 bg-farm-800 hover:bg-farm-900 text-white text-[11px] font-bold rounded-xl shadow whitespace-nowrap flex items-center gap-1"
-                                                                    >
-                                                                        <span>📄</span>
-                                                                        <span>ใบเสร็จ A4</span>
-                                                                    </button>
-
-                                                                    <button 
-                                                                        onClick={() => setSelectedOrderDetails({ ...order, forceDocType: 'delivery', isBackoffice: true })} 
-                                                                        className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-[11px] font-bold rounded-xl shadow whitespace-nowrap flex items-center gap-1"
-                                                                    >
-                                                                        <span>📦</span>
-                                                                        <span>ใบส่งของ A4</span>
-                                                                    </button>
-                                                                </div>
-
-                                                                {userRole === 'admin' && (
-                                                                    <button 
-                                                                        type="button"
-                                                                        onClick={() => handleDeleteOrderAdmin(order)}
-                                                                        className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold rounded-xl whitespace-nowrap transition-all"
-                                                                    >
-                                                                        🗑️ ลบ
-                                                                    </button>
-                                                                )}
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="text-xs space-y-1">
-                                                            {order.pickupTime && (
-                                                                <p className="text-amber-900 font-extrabold bg-amber-50 p-2 rounded-xl border border-amber-200">
-                                                                    ⏰ <strong>เวลานัดรับผักที่ฟาร์ม:</strong> {order.pickupTime}
-                                                                </p>
-                                                            )}
-                                                            {order.items && order.items.map((it, idx) => (
-                                                                <div key={idx} className="flex justify-between text-slate-600">
-                                                                    <span>• {it.name} x {it.qty} {it.unit}</span>
-                                                                    <span>฿{it.price * it.qty}</span>
-                                                                </div>
-                                                            ))}
-                                                            <div className="flex justify-between font-extrabold text-slate-900 pt-1 border-t">
-                                                                <span>ยอดเงินรวม</span>
-                                                                <span className="text-farm-800">฿{order.total}</span>
-                                                            </div>
-                                                        </div>
-
-                                                        {order.address && (
-                                                            <p className="text-[11px] text-slate-500 bg-slate-50 p-2 rounded-xl">
-                                                                📍 <strong>ที่อยู่ส่ง:</strong> {order.address} {order.mapsUrl && <a href={order.mapsUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline ml-1">เปิดแผนที่</a>}
-                                                            </p>
-                                                        )}
-
-                                                        <div className="pt-2 border-t flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
-                                                            <div className="w-full sm:w-auto">
-                                                                <label className="font-bold text-slate-700 block mb-0.5">📸 อัปโหลดรูปหลักฐานการจัดส่ง:</label>
-                                                                <input 
-                                                                    type="file" 
-                                                                    accept="image/*" 
-                                                                    onChange={e => {
-                                                                        if (e.target.files && e.target.files[0]) {
-                                                                            handleUploadProofImage(order.id, e.target.files[0]);
-                                                                        }
-                                                                    }}
-                                                                    className="text-[10px] text-slate-500"
-                                                                />
-                                                            </div>
-                                                            {order.slipImage && (
-                                                                <a href={order.slipImage} target="_blank" rel="noreferrer" className="text-blue-600 font-bold hover:underline text-[11px]">
-                                                                    🖼️ ดูสลิปโอนเงินลูกค้า
-                                                                </a>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-
+                                        {/* Backoffice Sub-tab: Inventory */}
                                         {adminTab === 'inventory' && userRole === 'admin' && (
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                                                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-3">
@@ -2034,6 +1940,7 @@
                                             </div>
                                         )}
 
+                                        {/* Backoffice Sub-tab: Reports */}
                                         {adminTab === 'reports' && userRole === 'admin' && (
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                                                 <div className="flex justify-between items-center border-b pb-3">
@@ -2111,8 +2018,10 @@
                                             </div>
                                         )}
 
+                                        {/* Backoffice Sub-tab: Settings */}
                                         {adminTab === 'settings' && userRole === 'admin' && (
                                             <div className="space-y-6">
+                                                {/* Staff Management Card */}
                                                 <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
                                                     <div className="border-b pb-3">
                                                         <h3 className="font-extrabold text-slate-900 text-base">👷 จัดการบัญชีผู้ใช้งานพนักงาน & รหัส PIN เข้าระบบ</h3>
@@ -2168,6 +2077,7 @@
                                                     </div>
                                                 </div>
 
+                                                {/* Wholesale Whitelist Card */}
                                                 <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
                                                     <div className="border-b pb-3">
                                                         <h3 className="font-extrabold text-slate-900 text-base">🏪 จัดการรายชื่อลูกค้าราคาพิเศษ / ร้านอาหาร / Shop</h3>
@@ -2256,6 +2166,7 @@
                                                     </div>
                                                 </div>
 
+                                                {/* Farm Details Form Card */}
                                                 <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
                                                     <div className="border-b pb-3">
                                                         <h3 className="font-extrabold text-slate-900 text-base">🏡 ตั้งค่าข้อมูลเกื้อบุญฟาร์ม & การชำระเงิน</h3>
@@ -2424,12 +2335,120 @@
                                                 </div>
                                             </div>
                                         )}
+
+                                        {/* Backoffice Sub-tab: Orders Active / Completed */}
+                                        {(adminTab === 'active' || adminTab === 'completed') && (
+                                            <div className="space-y-4">
+                                                {orders.filter(o => adminTab === 'completed' ? o.status === 'completed' : (o.status !== 'completed' && o.status !== 'cancelled')).map(order => (
+                                                    <div key={order.id} className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3">
+                                                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b pb-3">
+                                                            <div>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-extrabold text-slate-900 text-sm">{order.docNo}</span>
+                                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${order.isCredit ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                                                                        {order.isCredit ? 'เครดิต' : 'จ่ายสด/โอน'}
+                                                                    </span>
+                                                                </div>
+                                                                <p className="text-slate-400 text-[11px]">{order.date} • คุณ {order.customerName} ({order.phone})</p>
+                                                            </div>
+
+                                                            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                                                                <select 
+                                                                    value={order.status} 
+                                                                    onChange={e => updateOrderStatus(order.id, e.target.value)}
+                                                                    className="text-xs p-2 border border-slate-300 rounded-xl font-bold bg-slate-50 outline-none"
+                                                                >
+                                                                    <option value="pending">⏳ ได้รับออเดอร์</option>
+                                                                    <option value="packing">🥬 กำลังแพ็คผักสด</option>
+                                                                    <option value="shipping">🚚 กำลังจัดส่ง</option>
+                                                                    <option value="completed">✅ ส่งสำเร็จแล้ว</option>
+                                                                </select>
+
+                                                                <div className="flex items-center gap-1">
+                                                                    <button 
+                                                                        onClick={() => setSelectedOrderDetails({ ...order, forceDocType: 'receipt', isBackoffice: true })} 
+                                                                        className="px-2.5 py-1.5 bg-farm-800 hover:bg-farm-900 text-white text-[11px] font-bold rounded-xl shadow whitespace-nowrap flex items-center gap-1"
+                                                                    >
+                                                                        <span>📄</span>
+                                                                        <span>ใบเสร็จ A4</span>
+                                                                    </button>
+
+                                                                    <button 
+                                                                        onClick={() => setSelectedOrderDetails({ ...order, forceDocType: 'delivery', isBackoffice: true })} 
+                                                                        className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-[11px] font-bold rounded-xl shadow whitespace-nowrap flex items-center gap-1"
+                                                                    >
+                                                                        <span>📦</span>
+                                                                        <span>ใบส่งของ A4</span>
+                                                                    </button>
+                                                                </div>
+
+                                                                {userRole === 'admin' && (
+                                                                    <button 
+                                                                        type="button"
+                                                                        onClick={() => handleDeleteOrderAdmin(order)}
+                                                                        className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold rounded-xl whitespace-nowrap transition-all"
+                                                                    >
+                                                                        🗑️ ลบ
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="text-xs space-y-1">
+                                                            {order.pickupTime && (
+                                                                <p className="text-amber-900 font-extrabold bg-amber-50 p-2 rounded-xl border border-amber-200">
+                                                                    ⏰ <strong>เวลานัดรับผักที่ฟาร์ม:</strong> {order.pickupTime}
+                                                                </p>
+                                                            )}
+                                                            {order.items && order.items.map((it, idx) => (
+                                                                <div key={idx} className="flex justify-between text-slate-600">
+                                                                    <span>• {it.name} x {it.qty} {it.unit}</span>
+                                                                    <span>฿{it.price * it.qty}</span>
+                                                                </div>
+                                                            ))}
+                                                            <div className="flex justify-between font-extrabold text-slate-900 pt-1 border-t">
+                                                                <span>ยอดเงินรวม</span>
+                                                                <span className="text-farm-800">฿{order.total}</span>
+                                                            </div>
+                                                        </div>
+
+                                                        {order.address && (
+                                                            <p className="text-[11px] text-slate-500 bg-slate-50 p-2 rounded-xl">
+                                                                📍 <strong>ที่อยู่ส่ง:</strong> {order.address} {order.mapsUrl && <a href={order.mapsUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline ml-1">เปิดแผนที่</a>}
+                                                            </p>
+                                                        )}
+
+                                                        <div className="pt-2 border-t flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
+                                                            <div className="w-full sm:w-auto">
+                                                                <label className="font-bold text-slate-700 block mb-0.5">📸 อัปโหลดรูปหลักฐานการจัดส่ง:</label>
+                                                                <input 
+                                                                    type="file" 
+                                                                    accept="image/*" 
+                                                                    onChange={e => {
+                                                                        if (e.target.files && e.target.files[0]) {
+                                                                            handleUploadProofImage(order.id, e.target.files[0]);
+                                                                        }
+                                                                    }}
+                                                                    className="text-[10px] text-slate-500"
+                                                                />
+                                                            </div>
+                                                            {order.slipImage && (
+                                                                <a href={order.slipImage} target="_blank" rel="noreferrer" className="text-blue-600 font-bold hover:underline text-[11px]">
+                                                                    🖼️ ดูสลิปโอนเงินลูกค้า
+                                                                </a>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
                         )}
                     </main>
 
+                    {/* Document Preview Modal */}
                     {selectedOrderDetails && (
                         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
                             <div className="bg-white w-full max-w-3xl rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl my-auto">
@@ -2613,6 +2632,7 @@
                         </div>
                     )}
 
+                    {/* Edit Product Details Modal */}
                     {editingProductModal && (
                         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
                             <div className="bg-white rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl border my-auto">
@@ -2750,6 +2770,7 @@
                         </div>
                     )}
 
+                    {/* Mobile Bottom Navigation */}
                     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 md:hidden z-20">
                         <div className="grid grid-cols-3 text-center py-2 text-[11px] font-bold">
                             <button onClick={() => setView('store')} className={`space-y-0.5 ${view === 'store' ? 'text-farm-800 font-extrabold' : 'text-slate-400'}`}>
@@ -2762,7 +2783,7 @@
                             </button>
                             <button onClick={() => setView('backoffice')} className={`space-y-0.5 ${view === 'backoffice' ? 'text-farm-800 font-extrabold' : 'text-slate-400'}`}>
                                 <div className="text-base">👤🔧</div>
-                                <span>ระบบปฏิบัติการ</span>
+                                <span>ปฏิบัติการ</span>
                             </button>
                         </div>
                     </nav>
