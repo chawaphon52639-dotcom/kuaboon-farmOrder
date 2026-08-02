@@ -93,22 +93,33 @@
             measurementId: "G-WGKJYYSCNW"
         };
 
-        if (!firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
-        }
-        const db = firebase.firestore();
-        
-        try {
-            db.settings({
-                experimentalAutoDetectLongPolling: true
-            });
-        } catch (e) {
-            console.warn("Firestore settings configuration:", e);
+        let db = null;
+        let storage = null;
+
+        if (typeof firebase !== 'undefined' && firebase.apps) {
+            if (!firebase.apps.length) {
+                try {
+                    firebase.initializeApp(firebaseConfig);
+                } catch (e) {
+                    console.warn("Firebase initializeApp error:", e);
+                }
+            }
+            try {
+                db = firebase.firestore();
+                db.settings({
+                    experimentalAutoDetectLongPolling: true
+                });
+            } catch (e) {
+                console.warn("Firestore settings configuration:", e);
+            }
+            try {
+                storage = firebase.storage();
+            } catch (e) {
+                console.warn("Firebase storage error:", e);
+            }
         }
 
-        const storage = firebase.storage();
-
-        const roundStep = (num) => Math.round((num + Number.EPSILON) * 10) / 10;
+        const roundStep = (num) => Math.round((Number(num || 0) + Number.EPSILON) * 10) / 10;
 
         const getFallbackSvg = (name, bg = '#dcfce7', textCol = '#14532d', emoji = '🥬') => {
             const textName = name || 'ผักสดอินทรีย์';
@@ -206,6 +217,11 @@
                 throw err;
             }
 
+            if (!storage) {
+                console.warn("Storage is uninitialized, using DataURL fallback");
+                return dataUrlFallback || (typeof fileOrDataUrl === 'string' ? fileOrDataUrl : null);
+            }
+
             try {
                 const filename = `${folderName}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}.jpg`;
                 const ref = storage.ref().child(filename);
@@ -230,7 +246,9 @@
             const digits = ['ศูนย์', 'หนึ่ง', 'สอง', 'สาม', 'สี่', 'ห้า', 'หก', 'เจ็ด', 'แปด', 'เก้า'];
             const positions = ['', 'สิบ', 'ร้อย', 'พัน', 'หมื่น', 'แสน', 'ล้าน'];
             
-            let [baht, satang] = num.toString().split('.');
+            let parts = num.toString().split('.');
+            let baht = parts[0];
+            let satang = parts[1];
             let bahtStr = '';
             
             let len = baht.length;
@@ -278,9 +296,39 @@
             const [showRetailNoticeModal, setShowRetailNoticeModal] = React.useState(true);
             const [logoLoadFailed, setLogoLoadFailed] = React.useState(false);
 
+            // Customer Device Order Ownership & Search state (PRIVACY FIX)
+            const [myOrderIds, setMyOrderIds] = React.useState(() => {
+                try {
+                    const saved = localStorage.getItem('kuaboon_my_orders');
+                    return saved ? JSON.parse(saved) : [];
+                } catch (e) {
+                    return [];
+                }
+            });
+            const [trackingSearchInput, setTrackingSearchInput] = React.useState(() => {
+                try {
+                    return localStorage.getItem('kuaboon_cust_phone') || '';
+                } catch (e) {
+                    return '';
+                }
+            });
+            const [trackingSearchQuery, setTrackingSearchQuery] = React.useState(() => {
+                try {
+                    return localStorage.getItem('kuaboon_cust_phone') || '';
+                } catch (e) {
+                    return '';
+                }
+            });
+
             // Checkout state
             const [custName, setCustName] = React.useState('');
-            const [custPhone, setCustPhone] = React.useState('');
+            const [custPhone, setCustPhone] = React.useState(() => {
+                try {
+                    return localStorage.getItem('kuaboon_cust_phone') || '';
+                } catch (e) {
+                    return '';
+                }
+            });
             const [custAddress, setCustAddress] = React.useState('');
             const [custMapsUrl, setCustMapsUrl] = React.useState('');
             const [custPickupTime, setCustPickupTime] = React.useState('');
@@ -366,7 +414,7 @@
                 try {
                     if ('speechSynthesis' in window) {
                         window.speechSynthesis.cancel();
-                        for (let i = 0; i < 3; i++) {
+                        for (let i = 0; i < 2; i++) {
                             const utterance = new SpeechSynthesisUtterance('มีออเดอร์ใหม่เข้าแล้วครับ');
                             utterance.lang = 'th-TH';
                             utterance.rate = 1.0;
@@ -415,6 +463,12 @@
             };
 
             React.useEffect(() => {
+                if (!db) {
+                    setIsFirebaseConnected(false);
+                    setProducts(INITIAL_PRODUCTS);
+                    return;
+                }
+
                 const unsubProducts = db.collection('products').onSnapshot(async (snapshot) => {
                     setIsFirebaseConnected(true);
                     let items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -423,6 +477,10 @@
                     const missingInitial = INITIAL_PRODUCTS.filter(p => !existingIds.has(p.id));
 
                     if (missingInitial.length > 0) {
+                        const combined = [...items, ...missingInitial];
+                        combined.sort((a, b) => parseInt(a.id) - parseInt(b.id));
+                        setProducts(combined);
+
                         try {
                             const batch = db.batch();
                             missingInitial.forEach(p => {
@@ -443,10 +501,16 @@
                     setProducts(INITIAL_PRODUCTS);
                 });
 
-                const unsubOrders = db.collection('orders').orderBy('createdAt', 'desc').onSnapshot(snapshot => {
+                const unsubOrders = db.collection('orders').onSnapshot(snapshot => {
                     setIsFirebaseConnected(true);
-                    const ords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    let ords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     
+                    ords.sort((a, b) => {
+                        const timeA = a.createdAt && a.createdAt.seconds ? a.createdAt.seconds : Date.now();
+                        const timeB = b.createdAt && b.createdAt.seconds ? b.createdAt.seconds : Date.now();
+                        return timeB - timeA;
+                    });
+
                     if (isInitialOrderLoadRef.current) {
                         isInitialOrderLoadRef.current = false;
                     } else {
@@ -489,6 +553,10 @@
             }, []);
 
             const handleForceSync9Products = async () => {
+                if (!db) {
+                    showToast('⚠️ ไม่ได้เชื่อมต่อ Firebase', 'ไม่สามารถซิงค์ได้ในขณะนี้', 'error');
+                    return;
+                }
                 try {
                     showToast('⚡ กำลังซิงค์ผักครบ 9 รายการ...', 'กำลังส่งข้อมูลผักสดพร้อมภาพประกอบเข้าสู่ Firebase...', 'info');
                     const batch = db.batch();
@@ -530,7 +598,7 @@
             const totalSaladKg = roundStep(
                 cart
                     .filter(item => item.category === 'salad')
-                    .reduce((sum, item) => sum + item.qty, 0)
+                    .reduce((sum, item) => sum + (item.qty || 0), 0)
             );
 
             const isEligibleForWholesalePrice = customerType === 'wholesale' || totalSaladKg >= 5;
@@ -567,7 +635,7 @@
             const updateCartQty = (id, delta) => {
                 const targetProduct = products.find(p => p.id === id);
                 if (!targetProduct) return;
-                const step = getStep(targetProduct) * Math.sign(delta);
+                const step = delta > 0 ? getStep(targetProduct) : (delta < -50 ? -100 : -getStep(targetProduct));
 
                 setCart(cart.map(item => {
                     if (item.id === id) {
@@ -653,10 +721,10 @@
                         status: 'pending',
                         slipImage: uploadedSlipUrl,
                         proofImage: null,
-                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        createdAt: (typeof firebase !== 'undefined' && firebase.firestore) ? firebase.firestore.FieldValue.serverTimestamp() : new Date()
                     };
 
-                    if (isFirebaseConnected) {
+                    if (isFirebaseConnected && db) {
                         await db.collection('orders').doc(orderId).set(newOrder);
 
                         const batch = db.batch();
@@ -677,8 +745,21 @@
                         }));
                     }
 
+                    // Save Order ID & Phone number locally for privacy locking (PRIVACY FIX)
+                    try {
+                        const updatedMyIds = [orderId, ...myOrderIds];
+                        setMyOrderIds(updatedMyIds);
+                        localStorage.setItem('kuaboon_my_orders', JSON.stringify(updatedMyIds));
+                        if (custPhone) {
+                            localStorage.setItem('kuaboon_cust_phone', custPhone);
+                            setTrackingSearchQuery(custPhone);
+                            setTrackingSearchInput(custPhone);
+                        }
+                    } catch (err) {
+                        console.warn("LocalStorage save error:", err);
+                    }
+
                     setCustName('');
-                    setCustPhone('');
                     setCustAddress('');
                     setCustPickupTime('');
                     setCustMapsUrl('');
@@ -701,7 +782,6 @@
                 }
             };
 
-            // Credit Order Payment Settlement Handler
             const handleSettleCreditOrder = async (e) => {
                 e.preventDefault();
                 if (!settleOrderModal || !settleOrderModal.id || isSubmittingSettle) return;
@@ -723,7 +803,7 @@
                         settlementSlip: uploadedSettleSlipUrl || null
                     };
 
-                    if (isFirebaseConnected) {
+                    if (isFirebaseConnected && db) {
                         await db.collection('orders').doc(settleOrderModal.id).update(updatedData);
                     } else {
                         setOrders(prev => prev.map(o => o.id === settleOrderModal.id ? { ...o, ...updatedData } : o));
@@ -753,7 +833,7 @@
                     'ยืนยันยกเลิก',
                     async () => {
                         try {
-                            if (isFirebaseConnected) {
+                            if (isFirebaseConnected && db) {
                                 const batch = db.batch();
                                 const orderRef = db.collection('orders').doc(order.id);
                                 batch.update(orderRef, { status: 'cancelled' });
@@ -794,7 +874,7 @@
                     'ยืนยันลบออเดอร์',
                     async () => {
                         try {
-                            if (isFirebaseConnected) {
+                            if (isFirebaseConnected && db) {
                                 const batch = db.batch();
                                 const orderRef = db.collection('orders').doc(order.id);
                                 batch.delete(orderRef);
@@ -854,7 +934,7 @@
                 }
 
                 try {
-                    if (isFirebaseConnected) {
+                    if (isFirebaseConnected && db) {
                         await db.collection('orders').doc(orderId).update({ status: newStatus });
                     } else {
                         setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
@@ -870,7 +950,7 @@
                 try {
                     showToast('⏳ กำลังอัปโหลดหลักฐาน...', 'กำลังย่อและบันทึกรูปภาพ...', 'info');
                     const uploadedUrl = await uploadBlobToStorage(file, 'delivery_proofs');
-                    if (isFirebaseConnected) {
+                    if (isFirebaseConnected && db) {
                         await db.collection('orders').doc(orderId).update({ proofImage: uploadedUrl });
                     } else {
                         setOrders(prev => prev.map(o => o.id === orderId ? { ...o, proofImage: uploadedUrl } : o));
@@ -920,7 +1000,7 @@
 
                     setProducts(prev => prev.map(p => p.id === editingProductModal.id ? { ...p, ...updatedData } : p));
 
-                    if (isFirebaseConnected) {
+                    if (isFirebaseConnected && db) {
                         await db.collection('products').doc(editingProductModal.id).set(updatedData, { merge: true });
                     }
 
@@ -950,7 +1030,7 @@
                 setNewWholesalePhone('');
 
                 try {
-                    if (isFirebaseConnected) {
+                    if (isFirebaseConnected && db) {
                         await db.collection('settings').doc('farm_config').set({ wholesaleWhitelist: updatedList }, { merge: true });
                     }
                     showToast('✅ เพิ่มร้านค้าสำเร็จ', `ลงทะเบียนคุณ/ร้าน ${newWholesaleName} เข้าระบบลูกค้าราคาส่งเรียบร้อยแล้ว`, 'success');
@@ -976,7 +1056,7 @@
                 setEditingWholesaleId(null);
 
                 try {
-                    if (isFirebaseConnected) {
+                    if (isFirebaseConnected && db) {
                         await db.collection('settings').doc('farm_config').set({ wholesaleWhitelist: updatedList }, { merge: true });
                     }
                     showToast('✏️ แก้ไขข้อมูลสำเร็จ', 'อัปเดตชื่อและเบอร์โทรศัพท์ร้านค้าส่งเรียบร้อยแล้ว', 'success');
@@ -989,7 +1069,7 @@
                 const updatedList = wholesaleWhitelist.filter(w => w.id !== id);
                 setWholesaleWhitelist(updatedList);
                 try {
-                    if (isFirebaseConnected) {
+                    if (isFirebaseConnected && db) {
                         await db.collection('settings').doc('farm_config').set({ wholesaleWhitelist: updatedList }, { merge: true });
                     }
                     showToast('🗑️ ลบรายชื่อเรียบร้อย', 'ลบร้านค้าออกจากระบบสิทธิ์ราคาส่งแล้ว', 'info');
@@ -1016,7 +1096,7 @@
                 setNewStaffName('');
                 setNewStaffPin('');
                 try {
-                    if (isFirebaseConnected) {
+                    if (isFirebaseConnected && db) {
                         await db.collection('settings').doc('farm_config').set({ staffList: updatedStaff }, { merge: true });
                     }
                     showToast('✅ เพิ่มพนักงานสำเร็จ', `ลงทะเบียนคุณ ${newStaffName.trim()} เข้าระบบเรียบร้อยแล้ว`, 'success');
@@ -1029,7 +1109,7 @@
                 const updatedStaff = staffList.filter(s => s.id !== id);
                 setStaffList(updatedStaff);
                 try {
-                    if (isFirebaseConnected) {
+                    if (isFirebaseConnected && db) {
                         await db.collection('settings').doc('farm_config').set({ staffList: updatedStaff }, { merge: true });
                     }
                     showToast('🗑️ ลบพนักงานเรียบร้อย', 'ลบรายชื่อพนักงานออกจากระบบแล้ว', 'info');
@@ -1067,7 +1147,7 @@
                         masterAdminPin,
                         staffList,
                         wholesaleWhitelist,
-                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        updatedAt: (typeof firebase !== 'undefined' && firebase.firestore) ? firebase.firestore.FieldValue.serverTimestamp() : new Date()
                     };
 
                     setFarmLogoImage(finalLogo);
@@ -1076,7 +1156,7 @@
                     setCustomQrFile(null);
                     setLogoLoadFailed(false);
 
-                    if (isFirebaseConnected) {
+                    if (isFirebaseConnected && db) {
                         await db.collection('settings').doc('farm_config').set(settingsData, { merge: true });
                     }
                     showToast('💾 บันทึกตั้งค่าสำเร็จ', 'ข้อมูลฟาร์ม รูปโลโก้ และรูปภาพเรียบร้อยแล้ว', 'success');
@@ -1093,7 +1173,7 @@
                 setFarmLogoFile(null);
                 setLogoLoadFailed(false);
                 try {
-                    if (isFirebaseConnected) {
+                    if (isFirebaseConnected && db) {
                         await db.collection('settings').doc('farm_config').set({ farmLogoImage: '' }, { merge: true });
                     }
                     showToast('🗑️ ลบรูปโลโก้สำเร็จ', 'ระบบรีเซ็ตกลับไปใช้ไอคอนผักสดอัตโนมัติแล้ว', 'info');
@@ -1106,7 +1186,7 @@
                 setCustomQrImage('');
                 setCustomQrFile(null);
                 try {
-                    if (isFirebaseConnected) {
+                    if (isFirebaseConnected && db) {
                         await db.collection('settings').doc('farm_config').set({ customQrImage: '' }, { merge: true });
                     }
                     showToast('🗑️ ลบรูป QR Code สำเร็จ', 'ระบบรีเซ็ตกลับไปใช้ QR Code พร้อมเพย์อัตโนมัติแล้ว', 'info');
@@ -1125,10 +1205,7 @@
                                         src={farmLogoImage} 
                                         alt="Farm Logo" 
                                         className="h-11 sm:h-12 w-auto max-w-[140px] object-contain rounded-xl bg-white p-1 shadow-md border border-slate-200 flex-shrink-0" 
-                                        onError={(e) => {
-                                            console.warn("Logo load failed, showing default icon");
-                                            setLogoLoadFailed(true);
-                                        }}
+                                        onError={() => setLogoLoadFailed(true)}
                                     />
                                 ) : (
                                     <div className="w-11 h-11 bg-farm-800 text-white rounded-2xl flex items-center justify-center font-bold text-2xl shadow-md shadow-farm-800/30 flex-shrink-0">
@@ -1189,7 +1266,6 @@
                         </div>
                     </header>
 
-                    {/* LINE In-App Browser Warning Banner */}
                     {/LINE/i.test(navigator.userAgent) && (
                         <div className="bg-amber-500 text-slate-900 px-4 py-2 text-xs font-bold text-center border-b border-amber-600 shadow-inner flex items-center justify-center gap-2">
                             <span className="text-base">📱</span>
@@ -1197,7 +1273,6 @@
                         </div>
                     )}
 
-                    {/* Toast Modal */}
                     {toastModal.show && (
                         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
                             <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl border text-center">
@@ -1221,7 +1296,6 @@
                         </div>
                     )}
 
-                    {/* Confirmation Modal */}
                     {confirmModal.show && (
                         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
                             <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-5 shadow-2xl border text-center">
@@ -1252,7 +1326,6 @@
                         </div>
                     )}
 
-                    {/* Delivery Area Notice Modal */}
                     {showRetailNoticeModal && view === 'store' && customerType === 'retail' && (
                         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
                             <div className="bg-white text-slate-900 rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl border-2 border-emerald-500 text-center">
@@ -1290,7 +1363,6 @@
                     )}
 
                     <main className="max-w-6xl mx-auto px-4 pt-4">
-                        {/* STOREFRONT VIEW */}
                         {view === 'store' && (
                             <div className="space-y-6">
                                 {/* Top Banner */}
@@ -1376,7 +1448,6 @@
                                     </button>
                                 </div>
 
-                                {/* Products Grid */}
                                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
                                     {products
                                         .filter(p => selectedCategory === 'all' || p.category === selectedCategory)
@@ -1393,8 +1464,10 @@
                                                                 alt={product.name} 
                                                                 className="w-full h-full object-cover" 
                                                                 onError={(e) => {
-                                                                    e.target.onerror = null;
-                                                                    e.target.src = getFallbackSvg(product.name);
+                                                                    if (!e.target.dataset.fallback) {
+                                                                        e.target.dataset.fallback = 'true';
+                                                                        e.target.src = getFallbackSvg(product.name);
+                                                                    }
                                                                 }}
                                                             />
                                                             <div className="absolute top-2 left-2 flex flex-col gap-1">
@@ -1563,7 +1636,7 @@
                                                 <label className="font-bold text-slate-700 block mb-1">ที่อยู่สำหรับจัดส่ง *</label>
                                                 <textarea 
                                                     required 
-                                                    rows="2" 
+                                                    rows={2} 
                                                     placeholder="บ้านเลขที่ ถนน ซอย จุดสังเกต" 
                                                     value={custAddress}
                                                     onChange={e => setCustAddress(e.target.value)}
@@ -1628,8 +1701,10 @@
                                                                 className="w-52 h-52 sm:w-60 sm:h-60 mx-auto object-contain rounded-lg"
                                                                 style={{ imageRendering: 'pixelated' }}
                                                                 onError={(e) => {
-                                                                    e.target.onerror = null;
-                                                                    e.target.src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=PromptPay-${promptpayNo}-${cartTotal}`;
+                                                                    if (!e.target.dataset.fallback) {
+                                                                        e.target.dataset.fallback = 'true';
+                                                                        e.target.src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=PromptPay-${promptpayNo}-${cartTotal}`;
+                                                                    }
                                                                 }}
                                                             />
                                                         </div>
@@ -1694,100 +1769,175 @@
                             </div>
                         )}
 
-                        {/* ORDER TRACKING VIEW */}
-                        {}
-                        {view === 'tracking' && (
-                            <div className="space-y-4 max-w-3xl mx-auto">
-                                <h2 className="font-extrabold text-slate-900 text-lg">🚚 ติดตามสถานะออเดอร์จัดส่ง</h2>
+                        {view === 'tracking' && (() => {
+                            // PRIVACY FIX: Filter orders so customer only sees their own orders
+                            const cleanQuery = (trackingSearchQuery || '').trim().toLowerCase();
+                            const cleanQueryDigits = cleanQuery.replace(/[^0-9]/g, '');
 
-                                {orders.length === 0 ? (
-                                    <div className="bg-white p-8 rounded-3xl text-center text-slate-400 border">
-                                        ยังไม่มีออเดอร์ในขณะนี้
-                                    </div>
-                                ) : (
-                                    orders.map(order => {
-                                        const isPaid = !order.isCredit || order.paymentStatus === 'paid';
+                            const myCustomerOrders = orders.filter(order => {
+                                // 1. Match order placed from this device
+                                const isMyDeviceOrder = myOrderIds.includes(order.id);
+                                
+                                // 2. If user searched by phone number or document number
+                                if (cleanQuery) {
+                                    const orderPhoneDigits = (order.phone || '').replace(/[^0-9]/g, '');
+                                    const orderDocLower = (order.docNo || '').toLowerCase();
+                                    
+                                    const matchesPhone = cleanQueryDigits && orderPhoneDigits.includes(cleanQueryDigits);
+                                    const matchesDoc = orderDocLower.includes(cleanQuery);
+                                    
+                                    return isMyDeviceOrder || matchesPhone || matchesDoc;
+                                }
 
-                                        return (
-                                            <div key={order.id} className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3">
-                                                <div className="flex items-center justify-between border-b pb-3">
-                                                    <div>
-                                                        <span className="font-mono font-extrabold text-slate-900 text-sm">{order.docNo}</span>
-                                                        <p className="text-slate-400 text-[11px]">{order.date}</p>
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                                                            order.status === 'completed' ? 'bg-emerald-100 text-emerald-800' :
-                                                            order.status === 'shipping' ? 'bg-blue-100 text-blue-800' :
-                                                            order.status === 'packing' ? 'bg-amber-100 text-amber-800' :
-                                                            order.status === 'cancelled' ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-700'
-                                                        }`}>
-                                                            {order.status === 'completed' ? '✅ ส่งสำเร็จแล้ว' :
-                                                             order.status === 'shipping' ? '🚚 กำลังจัดส่ง' :
-                                                             order.status === 'packing' ? '🥬 กำลังแพ็คผักสด' :
-                                                             order.status === 'cancelled' ? '❌ ยกเลิกแล้ว' : '⏳ ได้รับออเดอร์'}
-                                                        </span>
+                                return isMyDeviceOrder;
+                            });
 
-                                                        {order.status === 'pending' && (
-                                                            <button 
-                                                                onClick={() => handleCancelOrder(order)}
-                                                                className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl font-bold text-[11px] transition-all"
-                                                            >
-                                                                ❌ ยกเลิกออเดอร์
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </div>
+                            return (
+                                <div className="space-y-4 max-w-3xl mx-auto">
+                                    <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3">
+                                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-3">
+                                            <div>
+                                                <h2 className="font-extrabold text-slate-900 text-lg">🚚 ติดตามสถานะออเดอร์ของคุณ</h2>
+                                                <p className="text-slate-500 text-xs">ระบบจะแสดงเฉพาะรายการสั่งซื้อของคุณ เพื่อความเป็นส่วนตัวครับ</p>
+                                            </div>
+                                            <span className="bg-emerald-50 text-emerald-800 font-extrabold text-xs px-3 py-1 rounded-full border border-emerald-200">
+                                                🔒 ข้อมูลส่วนบุคคล
+                                            </span>
+                                        </div>
 
-                                                <div className="text-xs space-y-1">
-                                                    <p><strong>ผู้สั่ง:</strong> คุณ {order.customerName} ({order.phone})</p>
-                                                    {order.pickupTime && <p className="text-amber-800 font-bold bg-amber-50 p-1.5 rounded-lg border border-amber-200">⏰ เวลานัดรับผักที่ฟาร์ม: {order.pickupTime}</p>}
-                                                    <p><strong>รายการ:</strong> {order.items.map(i => `${i.name} x${i.qty} ${i.unit}`).join(', ')}</p>
-                                                    <div className="flex items-center gap-2 pt-0.5">
-                                                        <span className="font-extrabold text-farm-800">ยอดรวม: ฿{order.total}</span>
-                                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${isPaid ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-rose-100 text-rose-800 border border-rose-300'}`}>
-                                                            {isPaid ? (order.isCredit ? '🟢 เครดิต (ชำระแล้ว)' : '🟢 ชำระแล้ว (โอน/สด)') : '🔴 ค้างชำระ (เครดิต)'}
-                                                        </span>
-                                                    </div>
-                                                </div>
-
-                                                <div className="pt-3 border-t space-y-2">
-                                                    <div className="flex flex-wrap items-center gap-2">
-                                                        {isPaid && (
-                                                            <button 
-                                                                onClick={() => setSelectedOrderDetails({ ...order, forceDocType: 'receipt' })}
-                                                                className="px-3 py-1.5 bg-farm-800 hover:bg-farm-900 text-white font-bold rounded-xl text-xs shadow transition-all flex items-center gap-1"
-                                                            >
-                                                                <span>📄</span>
-                                                                <span>รับใบเสร็จรับเงิน (A4)</span>
-                                                            </button>
-                                                        )}
-
-                                                        <button 
-                                                            onClick={() => setSelectedOrderDetails({ ...order, forceDocType: 'delivery' })}
-                                                            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs shadow transition-all flex items-center gap-1"
-                                                        >
-                                                            <span>📦</span>
-                                                            <span>{order.isCredit ? 'ใบส่งสินค้า / ใบแจ้งหนี้' : 'ดูใบส่งสินค้า (A4)'}</span>
-                                                        </button>
-                                                    </div>
-                                                </div>
-
-                                                {order.proofImage && (
-                                                    <div className="pt-2 border-t">
-                                                        <p className="text-xs font-bold text-slate-700 mb-1">📸 รูปหลักฐานการจัดส่ง:</p>
-                                                        <img src={order.proofImage} alt="Delivery Proof" className="w-32 h-32 object-cover rounded-xl border" />
-                                                    </div>
+                                        {/* Phone Number / Order Doc Search Box */}
+                                        <div className="flex flex-col sm:flex-row items-center gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                                            <div className="relative flex-1 w-full">
+                                                <span className="absolute left-3 top-2.5 text-slate-400 text-sm">📱</span>
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="กรอกเบอร์โทรศัพท์ หรือ เลขที่เอกสาร เพื่อค้นหาออเดอร์" 
+                                                    value={trackingSearchInput}
+                                                    onChange={e => setTrackingSearchInput(e.target.value)}
+                                                    onKeyDown={e => {
+                                                        if (e.key === 'Enter') {
+                                                            setTrackingSearchQuery(trackingSearchInput);
+                                                        }
+                                                    }}
+                                                    className="w-full pl-9 pr-8 py-2 border rounded-xl bg-white text-xs outline-none focus:border-farm-800 font-medium"
+                                                />
+                                                {trackingSearchInput && (
+                                                    <button 
+                                                        onClick={() => {
+                                                            setTrackingSearchInput('');
+                                                            setTrackingSearchQuery('');
+                                                        }}
+                                                        className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 font-bold text-xs"
+                                                    >
+                                                        ✕
+                                                    </button>
                                                 )}
                                             </div>
-                                        );
-                                    })
-                                )}
-                            </div>
-                        )}
+                                            <button 
+                                                type="button"
+                                                onClick={() => setTrackingSearchQuery(trackingSearchInput)}
+                                                className="w-full sm:w-auto px-5 py-2 bg-farm-800 hover:bg-farm-900 text-white font-extrabold text-xs rounded-xl shadow whitespace-nowrap transition-all"
+                                            >
+                                                🔍 ค้นหาออเดอร์
+                                            </button>
+                                        </div>
+                                    </div>
 
-                        {/* BACKOFFICE VIEW */}
-                        {}
+                                    {myCustomerOrders.length === 0 ? (
+                                        <div className="bg-white p-8 rounded-3xl text-center space-y-3 border border-slate-200 shadow-sm">
+                                            <div className="w-16 h-16 bg-slate-100 text-slate-400 rounded-3xl flex items-center justify-center text-3xl mx-auto">
+                                                📦
+                                            </div>
+                                            <div className="space-y-1">
+                                                <h3 className="font-extrabold text-slate-800 text-base">ไม่พบรายการสั่งซื้อบนอุปกรณ์นี้</h3>
+                                                <p className="text-slate-500 text-xs max-w-sm mx-auto">
+                                                    หากเคยสั่งซื้อไว้ล่วงหน้าหรือเปิดผ่านแอปอื่น กรุณากรอก <strong>เบอร์โทรศัพท์</strong> ในช่องค้นหาด้านบน เพื่อดึงรายการสั่งซื้อของคุณขึ้นมาได้เลยครับ 🌿
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        myCustomerOrders.map(order => {
+                                            const isPaid = !order.isCredit || order.paymentStatus === 'paid';
+
+                                            return (
+                                                <div key={order.id} className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3">
+                                                    <div className="flex items-center justify-between border-b pb-3">
+                                                        <div>
+                                                            <span className="font-mono font-extrabold text-slate-900 text-sm">{order.docNo}</span>
+                                                            <p className="text-slate-400 text-[11px]">{order.date}</p>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                                                                order.status === 'completed' ? 'bg-emerald-100 text-emerald-800' :
+                                                                order.status === 'shipping' ? 'bg-blue-100 text-blue-800' :
+                                                                order.status === 'packing' ? 'bg-amber-100 text-amber-800' :
+                                                                order.status === 'cancelled' ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-700'
+                                                            }`}>
+                                                                {order.status === 'completed' ? '✅ ส่งสำเร็จแล้ว' :
+                                                                 order.status === 'shipping' ? '🚚 กำลังจัดส่ง' :
+                                                                 order.status === 'packing' ? '🥬 กำลังแพ็คผักสด' :
+                                                                 order.status === 'cancelled' ? '❌ ยกเลิกแล้ว' : '⏳ ได้รับออเดอร์'}
+                                                            </span>
+
+                                                            {order.status === 'pending' && (
+                                                                <button 
+                                                                    onClick={() => handleCancelOrder(order)}
+                                                                    className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl font-bold text-[11px] transition-all"
+                                                                >
+                                                                    ❌ ยกเลิกออเดอร์
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="text-xs space-y-1">
+                                                        <p><strong>ผู้สั่ง:</strong> คุณ {order.customerName} ({order.phone})</p>
+                                                        {order.pickupTime && <p className="text-amber-800 font-bold bg-amber-50 p-1.5 rounded-lg border border-amber-200">⏰ เวลานัดรับผักที่ฟาร์ม: {order.pickupTime}</p>}
+                                                        <p><strong>รายการ:</strong> {order.items ? order.items.map(i => `${i.name} x${i.qty} ${i.unit}`).join(', ') : '-'}</p>
+                                                        <div className="flex items-center gap-2 pt-0.5">
+                                                            <span className="font-extrabold text-farm-800">ยอดรวม: ฿{order.total}</span>
+                                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${isPaid ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-rose-100 text-rose-800 border border-rose-300'}`}>
+                                                                {isPaid ? (order.isCredit ? '🟢 เครดิต (ชำระแล้ว)' : '🟢 ชำระแล้ว (โอน/สด)') : '🔴 ค้างชำระ (เครดิต)'}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="pt-3 border-t space-y-2">
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            {isPaid && (
+                                                                <button 
+                                                                    onClick={() => setSelectedOrderDetails({ ...order, forceDocType: 'receipt' })}
+                                                                    className="px-3 py-1.5 bg-farm-800 hover:bg-farm-900 text-white font-bold rounded-xl text-xs shadow transition-all flex items-center gap-1"
+                                                                >
+                                                                    <span>📄</span>
+                                                                    <span>รับใบเสร็จรับเงิน (A4)</span>
+                                                                </button>
+                                                            )}
+
+                                                            <button 
+                                                                onClick={() => setSelectedOrderDetails({ ...order, forceDocType: 'delivery' })}
+                                                                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs shadow transition-all flex items-center gap-1"
+                                                            >
+                                                                <span>📦</span>
+                                                                <span>{order.isCredit ? 'ใบส่งสินค้า / ใบแจ้งหนี้' : 'ดูใบส่งสินค้า (A4)'}</span>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    {order.proofImage && (
+                                                        <div className="pt-2 border-t">
+                                                            <p className="text-xs font-bold text-slate-700 mb-1">📸 รูปหลักฐานการจัดส่ง:</p>
+                                                            <img src={order.proofImage} alt="Delivery Proof" className="w-32 h-32 object-cover rounded-xl border" />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })
+                                    )}
+                                </div>
+                            );
+                        })()}
+
                         {view === 'backoffice' && (
                             <div className="space-y-6">
                                 {!isAdminLoggedIn ? (
@@ -1803,7 +1953,7 @@
                                         <form onSubmit={handleBackofficeLogin} className="space-y-4">
                                             <input 
                                                 type="password" 
-                                                maxLength="4" 
+                                                maxLength={4} 
                                                 required
                                                 placeholder="• • • •" 
                                                 value={adminPin}
@@ -1842,7 +1992,6 @@
                                             </div>
                                         </div>
 
-                                        {/* Backoffice Navigation Tabs */}
                                         <div className="flex border-b border-slate-200 gap-2 overflow-x-auto hide-scrollbar">
                                             <button 
                                                 onClick={() => setAdminTab('active')}
@@ -1881,7 +2030,6 @@
                                             )}
                                         </div>
 
-                                        {/* Backoffice Sub-tab: Inventory */}
                                         {adminTab === 'inventory' && userRole === 'admin' && (
                                             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                                                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-3">
@@ -1908,8 +2056,10 @@
                                                                         alt={p.name} 
                                                                         className="w-full h-full object-cover"
                                                                         onError={(e) => {
-                                                                            e.target.onerror = null;
-                                                                            e.target.src = getFallbackSvg(p.name);
+                                                                            if (!e.target.dataset.fallback) {
+                                                                                e.target.dataset.fallback = 'true';
+                                                                                e.target.src = getFallbackSvg(p.name);
+                                                                            }
                                                                         }} 
                                                                     />
                                                                     <button 
@@ -1937,7 +2087,7 @@
                                                                     onClick={async () => {
                                                                         const step = p.category === 'salad' ? 0.5 : 1;
                                                                         const newStock = Math.max(0, roundStep(p.stock - step));
-                                                                        if (isFirebaseConnected) {
+                                                                        if (isFirebaseConnected && db) {
                                                                             await db.collection('products').doc(p.id).update({ stock: newStock });
                                                                         } else {
                                                                             setProducts(prev => prev.map(item => item.id === p.id ? { ...item, stock: newStock } : item));
@@ -1954,7 +2104,7 @@
                                                                     onChange={async (e) => {
                                                                         const val = parseFloat(e.target.value) || 0;
                                                                         const newStock = roundStep(val);
-                                                                        if (isFirebaseConnected) {
+                                                                        if (isFirebaseConnected && db) {
                                                                             await db.collection('products').doc(p.id).update({ stock: newStock });
                                                                         } else {
                                                                             setProducts(prev => prev.map(item => item.id === p.id ? { ...item, stock: newStock } : item));
@@ -1967,7 +2117,7 @@
                                                                     onClick={async () => {
                                                                         const step = p.category === 'salad' ? 0.5 : 1;
                                                                         const newStock = roundStep(p.stock + step);
-                                                                        if (isFirebaseConnected) {
+                                                                        if (isFirebaseConnected && db) {
                                                                             await db.collection('products').doc(p.id).update({ stock: newStock });
                                                                         } else {
                                                                             setProducts(prev => prev.map(item => item.id === p.id ? { ...item, stock: newStock } : item));
@@ -1984,11 +2134,9 @@
                                             </div>
                                         )}
 
-                                        {/* Backoffice Sub-tab: Reports */}
                                         {adminTab === 'reports' && userRole === 'admin' && (() => {
                                             const validOrders = orders.filter(o => o.status !== 'cancelled');
                                             
-                                            // Financial breakdown calculations
                                             const totalCashReceived = roundStep(
                                                 validOrders
                                                     .filter(o => !o.isCredit || o.paymentStatus === 'paid')
@@ -2118,7 +2266,6 @@
                                             );
                                         })()}
 
-                                        {/* Backoffice Sub-tab: Settings */}
                                         {adminTab === 'settings' && userRole === 'admin' && (
                                             <div className="space-y-6">
                                                 {/* Staff Management Card */}
@@ -2139,7 +2286,7 @@
                                                         />
                                                         <input 
                                                             type="password" 
-                                                            maxLength="4"
+                                                            maxLength={4}
                                                             placeholder="PIN 4 หลัก" 
                                                             required
                                                             value={newStaffPin}
@@ -2296,7 +2443,7 @@
                                                         <div>
                                                             <label className="font-bold text-slate-700 block mb-1">ที่อยู่ฟาร์ม</label>
                                                             <textarea 
-                                                                rows="2"
+                                                                rows={2}
                                                                 value={farmAddress}
                                                                 onChange={e => setFarmAddress(e.target.value)}
                                                                 className="w-full p-2.5 border rounded-xl bg-slate-50 outline-none focus:border-farm-800"
@@ -2436,7 +2583,6 @@
                                             </div>
                                         )}
 
-                                        {/* Backoffice Sub-tab: Orders Active / Completed */}
                                         {(adminTab === 'active' || adminTab === 'completed') && (
                                             <div className="space-y-4">
                                                 {orders.filter(o => adminTab === 'completed' ? o.status === 'completed' : (o.status !== 'completed' && o.status !== 'cancelled')).map(order => {
@@ -2582,8 +2728,6 @@
                         )}
                     </main>
 
-                    {/* Credit Payment Settlement Modal */}
-                    {}
                     {settleOrderModal && (
                         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
                             <div className="bg-white rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl border my-auto">
@@ -2671,8 +2815,6 @@
                         </div>
                     )}
 
-                    {/* Document Preview Modal */}
-                    {}
                     {selectedOrderDetails && (
                         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
                             <div className="bg-white w-full max-w-3xl rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl my-auto">
@@ -2818,7 +2960,7 @@
                                                 </tbody>
                                                 <tfoot>
                                                     <tr className="border-t-2 border-slate-900 font-bold">
-                                                        <td colSpan="4" className="py-2 px-2 text-right">ยอดเงินสุทธิ:</td>
+                                                        <td colSpan={4} className="py-2 px-2 text-right">ยอดเงินสุทธิ:</td>
                                                         <td className="py-2 px-2 text-right text-base">฿{selectedOrderDetails.total}</td>
                                                     </tr>
                                                 </tfoot>
@@ -2868,7 +3010,6 @@
                         </div>
                     )}
 
-                    {/* Product Edit Modal */}
                     {editingProductModal && (
                         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
                             <div className="bg-white rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl border my-auto">
@@ -2930,7 +3071,7 @@
                                     <div>
                                         <label className="font-bold text-slate-700 block mb-1">📝 คำอธิบายสินค้า</label>
                                         <textarea 
-                                            rows="2"
+                                            rows={2}
                                             value={prodDesc}
                                             onChange={(e) => setProdDesc(e.target.value)}
                                             placeholder="เช่น ผักปลอดสาร สด กรอบ เก็บสดทุกเช้า"
@@ -2946,8 +3087,10 @@
                                                 alt="Preview" 
                                                 className="w-full h-full object-cover"
                                                 onError={(e) => {
-                                                    e.target.onerror = null;
-                                                    e.target.src = getFallbackSvg(prodName || editingProductModal.name);
+                                                    if (!e.target.dataset.fallback) {
+                                                        e.target.dataset.fallback = 'true';
+                                                        e.target.src = getFallbackSvg(prodName || editingProductModal.name);
+                                                    }
                                                 }}
                                             />
                                         </div>
@@ -3006,7 +3149,6 @@
                         </div>
                     )}
 
-                    {/* Mobile Navigation Bar */}
                     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 md:hidden z-20">
                         <div className="grid grid-cols-3 text-center py-2 text-[11px] font-bold">
                             <button onClick={() => setView('store')} className={`space-y-0.5 ${view === 'store' ? 'text-farm-800 font-extrabold' : 'text-slate-400'}`}>
@@ -3032,7 +3174,6 @@
     </script>
 </body>
 </html>
-
 
 
 
