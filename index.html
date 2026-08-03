@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>เกื้อบุญฟาร์ม - ระบบสั่งผักสดและบริหารจัดการคลาวด์ (Kuaboon Master v1.3)</title>
+    <title>เกื้อบุญฟาร์ม - ระบบสั่งผักสดและบริหารจัดการคลาวด์ (Kuaboon Master v1.4)</title>
     
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -613,8 +613,11 @@
             const getStep = (product) => product.category === 'salad' ? 0.5 : 1;
 
             const addToCart = (product, initialQty = null) => {
-                if (product.stock <= 0) return;
                 const step = initialQty !== null ? initialQty : getStep(product);
+                if (product.stock <= 0 || product.stock < step) {
+                    showToast('❌ ขออภัยผักหมด', `ขณะนี้ ${product.name} สินค้าหมดชั่วคราว ขออภัยในความไม่สะดวกครับ 🌿`, 'error');
+                    return;
+                }
                 const existing = cart.find(item => item.id === product.id);
                 if (existing) {
                     const newQty = roundStep(existing.qty + step);
@@ -624,10 +627,6 @@
                     }
                     setCart(cart.map(item => item.id === product.id ? { ...item, qty: newQty } : item));
                 } else {
-                    if (step > product.stock) {
-                        showToast('⚠️ สต็อกไม่พอ', `ขณะนี้ ${product.name} มีสต็อกพร้อมส่ง ${product.stock} ${product.unit}`, 'error');
-                        return;
-                    }
                     setCart([...cart, { ...product, qty: step }]);
                 }
             };
@@ -1362,6 +1361,7 @@
                         </div>
                     )}
 
+                    {}
                     <main className="max-w-6xl mx-auto px-4 pt-4">
                         {view === 'store' && (
                             <div className="space-y-6">
@@ -1454,6 +1454,7 @@
                                         .map(product => {
                                             const price = getItemPrice(product);
                                             const inCart = cart.find(i => i.id === product.id);
+                                            const isOutOfStock = product.category === 'salad' ? product.stock < 0.5 : product.stock <= 0;
 
                                             return (
                                                 <div key={product.id} className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col justify-between hover:shadow-md transition-all">
@@ -1471,10 +1472,10 @@
                                                                 }}
                                                             />
                                                             <div className="absolute top-2 left-2 flex flex-col gap-1">
-                                                                <span className="bg-slate-900/80 backdrop-blur-md text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full">
-                                                                    สต็อก {product.stock} {product.unit}
+                                                                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${isOutOfStock ? 'bg-rose-600 text-white shadow' : 'bg-slate-900/80 backdrop-blur-md text-white'}`}>
+                                                                    {isOutOfStock ? '❌ ผักหมดชั่วคราว' : `สต็อก ${product.stock} ${product.unit}`}
                                                                 </span>
-                                                                {product.category === 'salad' && isEligibleForWholesalePrice && (
+                                                                {product.category === 'salad' && isEligibleForWholesalePrice && !isOutOfStock && (
                                                                     <span className="bg-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow">
                                                                         ⭐ ราคาส่ง 100.-
                                                                     </span>
@@ -1486,10 +1487,12 @@
                                                             <h4 className="font-extrabold text-slate-900 text-xs sm:text-sm line-clamp-1">{product.name}</h4>
                                                             <p className="text-[11px] text-slate-500 line-clamp-2">{product.desc}</p>
                                                             <div className="pt-2 flex items-baseline gap-1">
-                                                                <span className="text-farm-800 font-black text-base sm:text-lg">฿{price}</span>
+                                                                <span className={`font-black text-base sm:text-lg ${isOutOfStock ? 'text-slate-400 line-through' : 'text-farm-800'}`}>฿{price}</span>
                                                                 <span className="text-slate-400 text-[10px]">/{product.unit}</span>
                                                                 {product.category === 'salad' && (
-                                                                    <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-bold ml-auto">ขั้นละ 0.5 กก.</span>
+                                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ml-auto ${isOutOfStock ? 'text-slate-400 bg-slate-100' : 'text-emerald-700 bg-emerald-50'}`}>
+                                                                        {isOutOfStock ? 'หมดชั่วคราว' : 'ขั้นละ 0.5 กก.'}
+                                                                    </span>
                                                                 )}
                                                             </div>
                                                         </div>
@@ -1515,15 +1518,21 @@
                                                                 <div className="grid grid-cols-2 gap-1.5">
                                                                     <button 
                                                                         onClick={() => addToCart(product, 0.5)}
-                                                                        disabled={product.stock < 0.5}
-                                                                        className="py-2.5 bg-farm-800 hover:bg-farm-900 text-white rounded-2xl font-bold text-xs shadow-md shadow-farm-800/20 transition-all disabled:bg-slate-200 disabled:text-slate-400 flex items-center justify-center gap-0.5"
+                                                                        className={`py-2.5 rounded-2xl font-bold text-xs shadow-md transition-all flex items-center justify-center gap-0.5 ${
+                                                                            product.stock < 0.5 
+                                                                            ? 'bg-slate-200 text-slate-500 hover:bg-slate-300' 
+                                                                            : 'bg-farm-800 hover:bg-farm-900 text-white shadow-farm-800/20'
+                                                                        }`}
                                                                     >
                                                                         <span>+ 0.5 กก.</span>
                                                                     </button>
                                                                     <button 
                                                                         onClick={() => addToCart(product, 1.0)}
-                                                                        disabled={product.stock < 1.0}
-                                                                        className="py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-2xl font-bold text-xs shadow-md shadow-emerald-700/20 transition-all disabled:bg-slate-200 disabled:text-slate-400 flex items-center justify-center gap-0.5"
+                                                                        className={`py-2.5 rounded-2xl font-bold text-xs shadow-md transition-all flex items-center justify-center gap-0.5 ${
+                                                                            product.stock < 1.0 
+                                                                            ? 'bg-slate-200 text-slate-500 hover:bg-slate-300' 
+                                                                            : 'bg-emerald-700 hover:bg-emerald-800 text-white shadow-emerald-700/20'
+                                                                        }`}
                                                                     >
                                                                         <span>+ 1.0 กก.</span>
                                                                     </button>
@@ -1531,14 +1540,13 @@
                                                             ) : (
                                                                 <button 
                                                                     onClick={() => addToCart(product, 1)}
-                                                                    disabled={product.stock <= 0}
                                                                     className={`w-full py-2.5 rounded-2xl font-bold text-xs transition-all flex items-center justify-center gap-1 ${
                                                                         product.stock > 0 
                                                                         ? 'bg-farm-800 hover:bg-farm-900 text-white shadow-md shadow-farm-800/20' 
-                                                                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                                                        : 'bg-slate-200 text-slate-500 hover:bg-slate-300'
                                                                     }`}
                                                                 >
-                                                                    <span>+ ใส่ตะกร้า (1 ขวด)</span>
+                                                                    <span>{product.stock > 0 ? '+ ใส่ตะกร้า (1 ขวด)' : '❌ ขออภัยผักหมด'}</span>
                                                                 </button>
                                                             )
                                                         )}
@@ -1769,6 +1777,7 @@
                             </div>
                         )}
 
+                        {}
                         {view === 'tracking' && (() => {
                             // PRIVACY FIX: Filter orders so customer only sees their own orders
                             const cleanQuery = (trackingSearchQuery || '').trim().toLowerCase();
@@ -1938,6 +1947,7 @@
                             );
                         })()}
 
+                        {}
                         {view === 'backoffice' && (
                             <div className="space-y-6">
                                 {!isAdminLoggedIn ? (
@@ -2647,17 +2657,17 @@
                                                                             <span>📦</span>
                                                                             <span>ใบส่งของ A4</span>
                                                                         </button>
-                                                                    </div>
 
-                                                                    {userRole === 'admin' && (
-                                                                        <button 
-                                                                            type="button"
-                                                                            onClick={() => handleDeleteOrderAdmin(order)}
-                                                                            className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold rounded-xl whitespace-nowrap transition-all"
-                                                                        >
-                                                                            🗑️ ลบ
-                                                                        </button>
-                                                                    )}
+                                                                        {userRole === 'admin' && (
+                                                                            <button 
+                                                                                type="button"
+                                                                                onClick={() => handleDeleteOrderAdmin(order)}
+                                                                                className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold rounded-xl whitespace-nowrap transition-all"
+                                                                            >
+                                                                                🗑️ ลบ
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
                                                             </div>
 
@@ -2728,6 +2738,7 @@
                         )}
                     </main>
 
+                    {}
                     {settleOrderModal && (
                         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
                             <div className="bg-white rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl border my-auto">
