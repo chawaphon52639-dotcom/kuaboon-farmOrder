@@ -560,7 +560,7 @@
                 try {
                     showToast('⚡ กำลังตรวจสอบและซิงค์...', 'ระบบกำลังเตรียมข้อมูลโดยรักษาข้อมูลรูปภาพและราคาเดิมไว้...', 'info');
 
-                    // 1. Fetch current products first to know what to keep
+                    // 1. ดึงข้อมูลผักที่มีอยู่ในปัจจุบันมาก่อน เพื่อดูว่ามีรูปหรือราคาที่อัปเดตไว้หรือยัง
                     const snapshot = await db.collection('products').get();
                     const existingData = {};
                     snapshot.forEach(doc => { existingData[doc.id] = doc.data(); });
@@ -570,16 +570,20 @@
                         const ref = db.collection('products').doc(p.id);
                         const existing = existingData[p.id];
                         
-                        // Merge safely: Keep existing image, prices, desc, and stock if they exist
+                        // 2. แกนหลักของความปลอดภัย: ผสมข้อมูลใหม่อย่างระมัดระวัง (Safe Merge)
                         const safeProductData = {
                             ...p,
+                            // ถ้าของเดิมมีรูปอยู่แล้ว ให้ใช้รูปเดิม! ถ้าไม่มี ถึงจะยอมใช้รูปวาด (p.image)
                             image: (existing && existing.image) ? existing.image : p.image,
+                            
+                            // ปกป้องราคา คำอธิบาย และสต็อก ไม่ให้โดนรีเซ็ตด้วยเช่นกัน
                             priceRetail: (existing && existing.priceRetail) ? existing.priceRetail : p.priceRetail,
                             priceWholesale: (existing && existing.priceWholesale) ? existing.priceWholesale : p.priceWholesale,
                             desc: (existing && existing.desc) ? existing.desc : p.desc,
                             stock: (existing && existing.stock !== undefined) ? existing.stock : p.stock
                         };
 
+                        // 3. เซฟข้อมูลที่ปลอดภัยแล้วลง Firebase
                         batch.set(ref, safeProductData, { merge: true });
                     });
                     await batch.commit();
