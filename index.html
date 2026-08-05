@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>เกื้อบุญฟาร์ม - ระบบสั่งผักสดและบริหารจัดการคลาวด์ (Kuaboon Master v1.4)</title>
+    <title>เกื้อบุญฟาร์ม - ระบบสั่งผักสดและบริหารจัดการคลาวด์ (Kuaboon Master v1.5)</title>
     
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -166,7 +166,7 @@
                     } else {
                         if (height > maxHeight) {
                             width = Math.round((width * maxHeight) / height);
-                            height = maxHeight;
+                            width = maxHeight;
                         }
                     }
 
@@ -558,14 +558,32 @@
                     return;
                 }
                 try {
-                    showToast('⚡ กำลังซิงค์ผักครบ 9 รายการ...', 'กำลังส่งข้อมูลผักสดพร้อมภาพประกอบเข้าสู่ Firebase...', 'info');
+                    showToast('⚡ กำลังตรวจสอบและซิงค์...', 'ระบบกำลังเตรียมข้อมูลโดยรักษาข้อมูลรูปภาพและราคาเดิมไว้...', 'info');
+
+                    // 1. Fetch current products first to know what to keep
+                    const snapshot = await db.collection('products').get();
+                    const existingData = {};
+                    snapshot.forEach(doc => { existingData[doc.id] = doc.data(); });
+
                     const batch = db.batch();
                     INITIAL_PRODUCTS.forEach(p => {
                         const ref = db.collection('products').doc(p.id);
-                        batch.set(ref, p, { merge: true });
+                        const existing = existingData[p.id];
+                        
+                        // Merge safely: Keep existing image, prices, desc, and stock if they exist
+                        const safeProductData = {
+                            ...p,
+                            image: (existing && existing.image) ? existing.image : p.image,
+                            priceRetail: (existing && existing.priceRetail) ? existing.priceRetail : p.priceRetail,
+                            priceWholesale: (existing && existing.priceWholesale) ? existing.priceWholesale : p.priceWholesale,
+                            desc: (existing && existing.desc) ? existing.desc : p.desc,
+                            stock: (existing && existing.stock !== undefined) ? existing.stock : p.stock
+                        };
+
+                        batch.set(ref, safeProductData, { merge: true });
                     });
                     await batch.commit();
-                    showToast('🎉 ซิงค์ผักสดสำเร็จ 100%!', 'รายการผักครบ 8 ชนิด + น้ำปั่นเคล 1 รายการ ถูกอัปเดตลงคลาวด์เรียบร้อยแล้ว', 'success');
+                    showToast('🎉 ซิงค์สำเร็จ ปลอดภัย 100%!', 'อัปเดตรายการผักครบ 9 ชนิด โดยรูปภาพและราคาที่น้ารามเคยตั้งไว้ยังอยู่ครบถ้วนครับ', 'success');
                 } catch (err) {
                     console.error("Force sync error:", err);
                     showToast('❌ ซิงค์ไม่สำเร็จ', 'กรุณาตรวจสอบสิทธิ์ Firestore Rules ใน Firebase Console', 'error');
@@ -627,6 +645,10 @@
                     }
                     setCart(cart.map(item => item.id === product.id ? { ...item, qty: newQty } : item));
                 } else {
+                    if (step > product.stock) {
+                        showToast('⚠️ สต็อกไม่พอ', `ขณะนี้ ${product.name} มีสต็อกพร้อมส่ง ${product.stock} ${product.unit}`, 'error');
+                        return;
+                    }
                     setCart([...cart, { ...product, qty: step }]);
                 }
             };
@@ -1361,7 +1383,6 @@
                         </div>
                     )}
 
-                    {}
                     <main className="max-w-6xl mx-auto px-4 pt-4">
                         {view === 'store' && (
                             <div className="space-y-6">
@@ -1499,7 +1520,15 @@
                                                     </div>
 
                                                     <div className="p-3 pt-0">
-                                                        {inCart ? (
+                                                        {isOutOfStock ? (
+                                                            <button 
+                                                                type="button"
+                                                                onClick={() => showToast('❌ ขออภัยผักหมด', `ขณะนี้ ${product.name} สินค้าหมดชั่วคราว ขออภัยในความไม่สะดวกครับ 🌿`, 'error')}
+                                                                className="w-full py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-500 rounded-2xl font-bold text-xs transition-all flex items-center justify-center gap-1 cursor-pointer"
+                                                            >
+                                                                <span>❌ ขออภัยผักหมด</span>
+                                                            </button>
+                                                        ) : inCart ? (
                                                             <div className="space-y-1.5">
                                                                 <div className="flex items-center justify-between bg-farm-50 p-1.5 rounded-2xl border border-farm-200">
                                                                     <button onClick={() => updateCartQty(product.id, -1)} className="w-8 h-8 bg-white rounded-xl text-farm-800 font-bold shadow text-xs flex items-center justify-center">-</button>
@@ -1518,21 +1547,13 @@
                                                                 <div className="grid grid-cols-2 gap-1.5">
                                                                     <button 
                                                                         onClick={() => addToCart(product, 0.5)}
-                                                                        className={`py-2.5 rounded-2xl font-bold text-xs shadow-md transition-all flex items-center justify-center gap-0.5 ${
-                                                                            product.stock < 0.5 
-                                                                            ? 'bg-slate-200 text-slate-500 hover:bg-slate-300' 
-                                                                            : 'bg-farm-800 hover:bg-farm-900 text-white shadow-farm-800/20'
-                                                                        }`}
+                                                                        className="py-2.5 bg-farm-800 hover:bg-farm-900 text-white rounded-2xl font-bold text-xs shadow-md shadow-farm-800/20 transition-all flex items-center justify-center gap-0.5"
                                                                     >
                                                                         <span>+ 0.5 กก.</span>
                                                                     </button>
                                                                     <button 
                                                                         onClick={() => addToCart(product, 1.0)}
-                                                                        className={`py-2.5 rounded-2xl font-bold text-xs shadow-md transition-all flex items-center justify-center gap-0.5 ${
-                                                                            product.stock < 1.0 
-                                                                            ? 'bg-slate-200 text-slate-500 hover:bg-slate-300' 
-                                                                            : 'bg-emerald-700 hover:bg-emerald-800 text-white shadow-emerald-700/20'
-                                                                        }`}
+                                                                        className="py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-2xl font-bold text-xs shadow-md shadow-emerald-700/20 transition-all flex items-center justify-center gap-0.5"
                                                                     >
                                                                         <span>+ 1.0 กก.</span>
                                                                     </button>
@@ -1540,13 +1561,9 @@
                                                             ) : (
                                                                 <button 
                                                                     onClick={() => addToCart(product, 1)}
-                                                                    className={`w-full py-2.5 rounded-2xl font-bold text-xs transition-all flex items-center justify-center gap-1 ${
-                                                                        product.stock > 0 
-                                                                        ? 'bg-farm-800 hover:bg-farm-900 text-white shadow-md shadow-farm-800/20' 
-                                                                        : 'bg-slate-200 text-slate-500 hover:bg-slate-300'
-                                                                    }`}
+                                                                    className="w-full py-2.5 bg-farm-800 hover:bg-farm-900 text-white rounded-2xl font-bold text-xs shadow-md shadow-farm-800/20 transition-all flex items-center justify-center gap-1"
                                                                 >
-                                                                    <span>{product.stock > 0 ? '+ ใส่ตะกร้า (1 ขวด)' : '❌ ขออภัยผักหมด'}</span>
+                                                                    <span>+ ใส่ตะกร้า (1 ขวด)</span>
                                                                 </button>
                                                             )
                                                         )}
@@ -1777,7 +1794,6 @@
                             </div>
                         )}
 
-                        {}
                         {view === 'tracking' && (() => {
                             // PRIVACY FIX: Filter orders so customer only sees their own orders
                             const cleanQuery = (trackingSearchQuery || '').trim().toLowerCase();
@@ -1792,8 +1808,8 @@
                                     const orderPhoneDigits = (order.phone || '').replace(/[^0-9]/g, '');
                                     const orderDocLower = (order.docNo || '').toLowerCase();
                                     
-                                    const matchesPhone = cleanQueryDigits && orderPhoneDigits.includes(cleanQueryDigits);
-                                    const matchesDoc = orderDocLower.includes(cleanQuery);
+                                    const matchesPhone = cleanQueryDigits && orderPhoneDigits === cleanQueryDigits;
+                                    const matchesDoc = orderDocLower === cleanQuery;
                                     
                                     return isMyDeviceOrder || matchesPhone || matchesDoc;
                                 }
@@ -1947,7 +1963,6 @@
                             );
                         })()}
 
-                        {}
                         {view === 'backoffice' && (
                             <div className="space-y-6">
                                 {!isAdminLoggedIn ? (
@@ -2738,7 +2753,6 @@
                         )}
                     </main>
 
-                    {}
                     {settleOrderModal && (
                         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
                             <div className="bg-white rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl border my-auto">
