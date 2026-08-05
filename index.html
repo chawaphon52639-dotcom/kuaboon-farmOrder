@@ -61,19 +61,19 @@
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
         @media print {
+            @page { margin: 0; size: auto; }
             body { background: white !important; color: black !important; }
             body * { visibility: hidden; }
             #printable-area, #printable-area * { visibility: visible; }
             #printable-area { 
-                position: fixed; 
+                position: absolute; 
                 left: 0; 
                 top: 0; 
-                width: 100%; 
-                height: auto;
+                width: 210mm; 
+                height: 297mm;
                 margin: 0; 
-                padding: 15mm; 
+                padding: 10mm !important; 
                 background: white !important;
-                z-index: 99999;
             }
             .no-print { display: none !important; }
         }
@@ -477,8 +477,8 @@
                     const missingInitial = INITIAL_PRODUCTS.filter(p => !existingIds.has(p.id));
 
                     if (missingInitial.length > 0) {
-                        // 🛑 ลบระบบ Auto-Save ทิ้ง! เพื่อไม่ให้มันเผลอเอารูปวาดไปทับฐานข้อมูลของจริงเวลาเน็ตช้า
-                        // ทำแค่เอาข้อมูลมาผสมกันเพื่อแสดงผลหน้าเว็บชั่วคราวเท่านั้น
+                        // 🛑 v1.6 FIX: ถอดระบบ Auto-Save ทิ้ง! ป้องกันรูปภาพหายเมื่อเน็ตกระตุก
+                        // นำข้อมูลเริ่มต้นมารวมแสดงผลขัดตาทัพเฉยๆ โดยไม่เซฟทับฐานข้อมูล
                         const combined = [...items, ...missingInitial];
                         combined.sort((a, b) => parseInt(a.id) - parseInt(b.id));
                         setProducts(combined);
@@ -551,7 +551,6 @@
                 try {
                     showToast('⚡ กำลังตรวจสอบและซิงค์...', 'ระบบกำลังเตรียมข้อมูลโดยรักษาข้อมูลรูปภาพและราคาเดิมไว้...', 'info');
 
-                    // 1. ดึงข้อมูลผักที่มีอยู่ในปัจจุบันมาก่อน เพื่อดูว่ามีรูปหรือราคาที่อัปเดตไว้หรือยัง
                     const snapshot = await db.collection('products').get();
                     const existingData = {};
                     snapshot.forEach(doc => { existingData[doc.id] = doc.data(); });
@@ -561,20 +560,17 @@
                         const ref = db.collection('products').doc(p.id);
                         const existing = existingData[p.id];
                         
-                        // 2. แกนหลักของความปลอดภัย: ผสมข้อมูลใหม่อย่างระมัดระวัง (Safe Merge)
+                        // 🛑 v1.6 FIX: แกนหลักของความปลอดภัย ผสมข้อมูลอย่างระมัดระวัง (Safe Merge)
+                        // ถ้ารายการนั้นมีรูปภาพเดิมอยู่แล้ว ให้ใช้รูปเดิมเสมอ! ป้องกันรูปภาพหาย
                         const safeProductData = {
                             ...p,
-                            // ถ้าของเดิมมีรูปอยู่แล้ว ให้ใช้รูปเดิม! ถ้าไม่มี ถึงจะยอมใช้รูปวาด (p.image)
                             image: (existing && existing.image) ? existing.image : p.image,
-                            
-                            // ปกป้องราคา คำอธิบาย และสต็อก ไม่ให้โดนรีเซ็ตด้วยเช่นกัน
                             priceRetail: (existing && existing.priceRetail) ? existing.priceRetail : p.priceRetail,
                             priceWholesale: (existing && existing.priceWholesale) ? existing.priceWholesale : p.priceWholesale,
                             desc: (existing && existing.desc) ? existing.desc : p.desc,
                             stock: (existing && existing.stock !== undefined) ? existing.stock : p.stock
                         };
 
-                        // 3. เซฟข้อมูลที่ปลอดภัยแล้วลง Firebase
                         batch.set(ref, safeProductData, { merge: true });
                     });
                     await batch.commit();
@@ -761,7 +757,7 @@
                         }));
                     }
 
-                    // Save Order ID & Phone number locally for privacy locking (PRIVACY FIX)
+                    // Save Order ID & Phone number locally for privacy locking
                     try {
                         const updatedMyIds = [orderId, ...myOrderIds];
                         setMyOrderIds(updatedMyIds);
@@ -1382,7 +1378,6 @@
                     <main className="max-w-6xl mx-auto px-4 pt-4">
                         {view === 'store' && (
                             <div className="space-y-6">
-                                {/* Top Banner */}
                                 <div className="bg-gradient-to-r from-farm-800 to-emerald-600 text-white p-6 rounded-3xl shadow-lg relative overflow-hidden">
                                     <div className="relative z-10 space-y-2 max-w-xl">
                                         <div className="flex flex-wrap items-center gap-2">
@@ -1471,6 +1466,7 @@
                                         .map(product => {
                                             const price = getItemPrice(product);
                                             const inCart = cart.find(i => i.id === product.id);
+                                            // 🛑 v1.6 Out-of-Stock Logic
                                             const isOutOfStock = product.category === 'salad' ? product.stock < 0.5 : product.stock <= 0;
 
                                             return (
@@ -1543,23 +1539,13 @@
                                                                 <div className="grid grid-cols-2 gap-1.5">
                                                                     <button 
                                                                         onClick={() => addToCart(product, 0.5)}
-                                                                        disabled={product.stock < 0.5}
-                                                                        className={`py-2.5 rounded-2xl font-bold text-xs shadow-md transition-all flex items-center justify-center gap-0.5 ${
-                                                                            product.stock < 0.5 
-                                                                            ? 'bg-slate-200 text-slate-500 hover:bg-slate-300' 
-                                                                            : 'bg-farm-800 hover:bg-farm-900 text-white shadow-farm-800/20'
-                                                                        }`}
+                                                                        className="py-2.5 rounded-2xl font-bold text-xs shadow-md transition-all flex items-center justify-center gap-0.5 bg-farm-800 hover:bg-farm-900 text-white shadow-farm-800/20"
                                                                     >
                                                                         <span>+ 0.5 กก.</span>
                                                                     </button>
                                                                     <button 
                                                                         onClick={() => addToCart(product, 1.0)}
-                                                                        disabled={product.stock < 1.0}
-                                                                        className={`py-2.5 rounded-2xl font-bold text-xs shadow-md transition-all flex items-center justify-center gap-0.5 ${
-                                                                            product.stock < 1.0 
-                                                                            ? 'bg-slate-200 text-slate-500 hover:bg-slate-300' 
-                                                                            : 'bg-emerald-700 hover:bg-emerald-800 text-white shadow-emerald-700/20'
-                                                                        }`}
+                                                                        className="py-2.5 rounded-2xl font-bold text-xs shadow-md transition-all flex items-center justify-center gap-0.5 bg-emerald-700 hover:bg-emerald-800 text-white shadow-emerald-700/20"
                                                                     >
                                                                         <span>+ 1.0 กก.</span>
                                                                     </button>
@@ -1567,12 +1553,7 @@
                                                             ) : (
                                                                 <button 
                                                                     onClick={() => addToCart(product, 1)}
-                                                                    disabled={product.stock <= 0}
-                                                                    className={`w-full py-2.5 rounded-2xl font-bold text-xs shadow-md transition-all flex items-center justify-center gap-1 ${
-                                                                        product.stock > 0 
-                                                                        ? 'bg-farm-800 hover:bg-farm-900 text-white shadow-farm-800/20' 
-                                                                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                                                                    }`}
+                                                                    className="w-full py-2.5 rounded-2xl font-bold text-xs shadow-md transition-all flex items-center justify-center gap-1 bg-farm-800 hover:bg-farm-900 text-white shadow-farm-800/20"
                                                                 >
                                                                     <span>+ ใส่ตะกร้า (1 ขวด)</span>
                                                                 </button>
@@ -1612,6 +1593,7 @@
                             </div>
                         )}
 
+                        {}
                         {showCartDrawer && (
                             <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex justify-end">
                                 <div className="bg-white w-full max-w-lg h-full overflow-y-auto p-5 space-y-6 flex flex-col justify-between">
@@ -1749,7 +1731,6 @@
                                                             {bankAccountNo && <div className="text-xs text-slate-800 font-sans font-bold">{bankAccountNo}</div>}
                                                         </div>
 
-                                                        {/* Contact Numbers Banner */}
                                                         <div className="bg-emerald-50 p-3 rounded-2xl border border-emerald-200 text-left text-xs font-bold text-emerald-950 space-y-1">
                                                             <p className="font-extrabold text-emerald-900 flex items-center gap-1">
                                                                 <span>📞</span> <span>เบอร์ติดต่อสอบถาม/ติดต่อนัดรับ:</span>
@@ -1805,26 +1786,20 @@
                             </div>
                         )}
 
+                        {}
                         {view === 'tracking' && (() => {
-                            // PRIVACY FIX: Filter orders so customer only sees their own orders
                             const cleanQuery = (trackingSearchQuery || '').trim().toLowerCase();
                             const cleanQueryDigits = cleanQuery.replace(/[^0-9]/g, '');
 
                             const myCustomerOrders = orders.filter(order => {
-                                // 1. Match order placed from this device
                                 const isMyDeviceOrder = myOrderIds.includes(order.id);
-                                
-                                // 2. If user searched by phone number or document number
                                 if (cleanQuery) {
                                     const orderPhoneDigits = (order.phone || '').replace(/[^0-9]/g, '');
                                     const orderDocLower = (order.docNo || '').toLowerCase();
-                                    
                                     const matchesPhone = cleanQueryDigits && orderPhoneDigits === cleanQueryDigits;
                                     const matchesDoc = orderDocLower === cleanQuery;
-                                    
                                     return isMyDeviceOrder || matchesPhone || matchesDoc;
                                 }
-
                                 return isMyDeviceOrder;
                             });
 
@@ -1841,7 +1816,6 @@
                                             </span>
                                         </div>
 
-                                        {/* Phone Number / Order Doc Search Box */}
                                         <div className="flex flex-col sm:flex-row items-center gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-200">
                                             <div className="relative flex-1 w-full">
                                                 <span className="absolute left-3 top-2.5 text-slate-400 text-sm">📱</span>
@@ -2261,7 +2235,7 @@
                                                                                         setSettleSlipFile(null);
                                                                                         setSettleSlipPreview('');
                                                                                     }}
-                                                                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-lg text-[11px] shadow transition-all flex items-center gap-1"
+                                                                                    className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black rounded-xl shadow whitespace-nowrap flex items-center gap-1"
                                                                                 >
                                                                                     <span>🟢</span>
                                                                                     <span>รับชำระเงิน</span>
@@ -2521,7 +2495,7 @@
                                                         </div>
 
                                                         <div>
-                                                            <label className="font-bold text-slate-700 block mb-1">📸 รูปโลโก้เกื้อบุญฟาร์ม (แสดงที่เมนูบนสุด & ใบเสร็จ A4)</label>
+                                                            <label className="font-bold text-slate-700 block mb-1">📸 รูปโลโกเกื้อบุญฟาร์ม (แสดงที่เมนูบนสุด & ใบเสร็จ A4)</label>
                                                             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 bg-slate-50 p-3 rounded-xl border mb-3">
                                                                 {farmLogoImage ? (
                                                                     <div className="relative flex-shrink-0">
@@ -2898,7 +2872,7 @@
                                                     if (window.html2pdf) {
                                                         showToast('⏳ กำลังสร้างไฟล์ PDF...', 'ระบบกำลังประมวลผลเอกสาร PDF กรุณารอสักครู่ครับ', 'info');
                                                         const opt = {
-                                                            margin:       [10, 10, 10, 10],
+                                                            margin:       0,
                                                             filename:     `${selectedOrderDetails.docNo.replace(/[\/\\]/g, '_')}.pdf`,
                                                             image:        { type: 'jpeg', quality: 0.98 },
                                                             html2canvas:  { scale: 2, useCORS: true, allowTaint: true },
@@ -2939,107 +2913,142 @@
                                         ? selectedOrderDetails.forceDocType === 'receipt' 
                                         : (!selectedOrderDetails.isCredit || selectedOrderDetails.paymentStatus === 'paid');
 
-                                    return (
-                                        <div id="printable-area" className="space-y-6 text-slate-800 text-xs">
-                                            <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4">
-                                                <div className="flex items-start gap-3">
-                                                    {(farmLogoImage && !logoLoadFailed) && (
-                                                        <img src={farmLogoImage} alt="Logo" className="w-16 h-16 object-contain rounded-xl border p-1 bg-white" onError={() => setLogoLoadFailed(true)} />
-                                                    )}
-                                                    <div>
-                                                        <h1 className="text-xl font-extrabold text-slate-900">{farmName}</h1>
-                                                        <p className="mt-1">{farmAddress}</p>
-                                                        <p>โทร: {farmPhone} | เลขประจำตัวผู้เสียภาษี: {taxId}</p>
+                                    const docContent = (isCopy) => (
+                                        <div className="flex flex-col justify-between relative" style={{ height: '135mm', overflow: 'hidden' }}>
+                                            <div>
+                                                <div className="flex justify-between items-start border-b-2 border-slate-900 pb-2 relative">
+                                                    <div className="absolute top-0 right-0 border-2 border-slate-400 text-slate-500 font-extrabold px-2 py-0.5 rounded text-[10px]">
+                                                        {isCopy ? '[ สำเนา / Copy ]' : '[ ต้นฉบับ / Original ]'}
+                                                    </div>
+                                                    <div className="flex items-start gap-3">
+                                                        {(farmLogoImage && !logoLoadFailed) && (
+                                                            <img src={farmLogoImage} alt="Logo" className="w-12 h-12 object-contain rounded-xl border p-1 bg-white" onError={() => setLogoLoadFailed(true)} />
+                                                        )}
+                                                        <div className="pr-20">
+                                                            <h1 className="text-lg font-extrabold text-slate-900 leading-tight">{farmName}</h1>
+                                                            <p className="text-[10px] leading-tight mt-0.5">{farmAddress}</p>
+                                                            <p className="text-[10px] leading-tight">โทร: {farmPhone} | เลขประจำตัวผู้เสียภาษี: {taxId}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right flex-shrink-0 mt-6">
+                                                        <h2 className="text-sm font-black text-slate-900">
+                                                            {isReceipt ? 'ใบเสร็จรับเงิน (Receipt)' : 'ใบส่งสินค้า / ใบแจ้งหนี้'}
+                                                        </h2>
+                                                        <p className="font-mono font-bold text-slate-600 text-[10px]">{selectedOrderDetails.docNo}</p>
+                                                        <p className="text-[9px] text-slate-500">วันที่: {selectedOrderDetails.date}</p>
+                                                        {isReceipt && selectedOrderDetails.settledAt && (
+                                                            <p className="text-[9px] text-emerald-800 font-bold">รับเงิน: {selectedOrderDetails.settledAt}</p>
+                                                        )}
                                                     </div>
                                                 </div>
-                                                <div className="text-right">
-                                                    <h2 className="text-lg font-black text-slate-900">
-                                                        {isReceipt ? 'ใบเสร็จรับเงิน (Receipt)' : 'ใบส่งสินค้า / ใบแจ้งหนี้ (Delivery Note)'}
-                                                    </h2>
-                                                    <p className="font-mono font-bold mt-1 text-slate-600">{selectedOrderDetails.docNo}</p>
-                                                    <p className="text-[11px] text-slate-500">วันที่: {selectedOrderDetails.date}</p>
-                                                    {isReceipt && selectedOrderDetails.settledAt && (
-                                                        <p className="text-[10px] text-emerald-800 font-bold">วันที่รับเงิน: {selectedOrderDetails.settledAt}</p>
-                                                    )}
+
+                                                <div className="bg-slate-50 p-2 rounded-xl mt-2 mb-2 text-[10px] flex justify-between">
+                                                    <div>
+                                                        <p><strong>ชื่อลูกค้า / ร้านค้า:</strong> คุณ {selectedOrderDetails.customerName}</p>
+                                                        <p><strong>เบอร์โทรศัพท์:</strong> {selectedOrderDetails.phone} {selectedOrderDetails.pickupTime && <span className="text-amber-800 font-bold ml-2"><strong>นัดรับที่ฟาร์ม:</strong> {selectedOrderDetails.pickupTime}</span>}</p>
+                                                        <p><strong>ที่อยู่จัดส่ง:</strong> {selectedOrderDetails.address}</p>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p>
+                                                            <strong>สถานะชำระเงิน:</strong> <br/>
+                                                            <span className="font-bold text-[11px]">
+                                                                {isReceipt ? 'ชำระเงินเรียบร้อยแล้ว' : 'ค้างชำระ (เครดิตร้านค้า)'}
+                                                            </span>
+                                                        </p>
+                                                    </div>
                                                 </div>
-                                            </div>
 
-                                            <div className="bg-slate-50 p-3 rounded-xl space-y-1">
-                                                <p><strong>ชื่อลูกค้า / ร้านค้า:</strong> คุณ {selectedOrderDetails.customerName}</p>
-                                                <p><strong>เบอร์โทรศัพท์:</strong> {selectedOrderDetails.phone}</p>
-                                                <p><strong>ที่อยู่จัดส่ง:</strong> {selectedOrderDetails.address}</p>
-                                                {selectedOrderDetails.pickupTime && <p className="text-amber-800 font-bold"><strong>เวลานัดรับที่ฟาร์ม:</strong> {selectedOrderDetails.pickupTime}</p>}
-                                                <p className="pt-1">
-                                                    <strong>สถานะชำระเงิน:</strong> {' '}
-                                                    <span className="font-bold">
-                                                        {isReceipt ? 'ชำระเงินเรียบร้อยแล้ว' : 'ค้างชำระ (เครดิตร้านค้า)'}
-                                                    </span>
-                                                </p>
-                                            </div>
-
-                                            <table className="w-full text-left border-collapse">
-                                                <thead>
-                                                    <tr className="border-b-2 border-slate-300 bg-slate-100">
-                                                        <th className="py-2 px-2">ลำดับ</th>
-                                                        <th className="py-2 px-2">รายการผักปลอดสาร / สินค้า</th>
-                                                        <th className="py-2 px-2 text-center">จำนวน</th>
-                                                        <th className="py-2 px-2 text-right">ราคา/หน่วย</th>
-                                                        <th className="py-2 px-2 text-right">จำนวนเงิน</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y">
-                                                    {selectedOrderDetails.items && selectedOrderDetails.items.map((it, idx) => (
-                                                        <tr key={idx}>
-                                                            <td className="py-2 px-2 text-center">{idx + 1}</td>
-                                                            <td className="py-2 px-2 font-bold">{it.name}</td>
-                                                            <td className="py-2 px-2 text-center">{it.qty} {it.unit}</td>
-                                                            <td className="py-2 px-2 text-right">฿{it.price}</td>
-                                                            <td className="py-2 px-2 text-right font-bold">฿{it.price * it.qty}</td>
+                                                <table className="w-full text-left border-collapse text-[10px]">
+                                                    <thead>
+                                                        <tr className="border-b-2 border-slate-300 bg-slate-100">
+                                                            <th className="py-1 px-1 text-center w-10">ลำดับ</th>
+                                                            <th className="py-1 px-1">รายการผักปลอดสาร / สินค้า</th>
+                                                            <th className="py-1 px-1 text-center w-16">จำนวน</th>
+                                                            <th className="py-1 px-1 text-right w-20">ราคา/หน่วย</th>
+                                                            <th className="py-1 px-1 text-right w-20">จำนวนเงิน</th>
                                                         </tr>
-                                                    ))}
-                                                </tbody>
-                                                <tfoot>
-                                                    <tr className="border-t-2 border-slate-900 font-bold">
-                                                        <td colSpan={4} className="py-2 px-2 text-right">ยอดเงินสุทธิ:</td>
-                                                        <td className="py-2 px-2 text-right text-base">฿{selectedOrderDetails.total}</td>
-                                                    </tr>
-                                                </tfoot>
-                                            </table>
-
-                                            <div className="bg-slate-100 p-2.5 rounded-xl text-center font-bold">
-                                                ({bahtText(selectedOrderDetails.total)})
+                                                    </thead>
+                                                    <tbody className="divide-y">
+                                                        {selectedOrderDetails.items && selectedOrderDetails.items.map((it, idx) => (
+                                                            <tr key={idx}>
+                                                                <td className="py-1 px-1 text-center">{idx + 1}</td>
+                                                                <td className="py-1 px-1 font-bold">{it.name}</td>
+                                                                <td className="py-1 px-1 text-center">{it.qty} {it.unit}</td>
+                                                                <td className="py-1 px-1 text-right">฿{it.price}</td>
+                                                                <td className="py-1 px-1 text-right font-bold">฿{it.price * it.qty}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                    <tfoot>
+                                                        <tr className="border-t-2 border-slate-900 font-bold">
+                                                            <td colSpan={3}>
+                                                                <div className="bg-slate-100 px-2 py-1 rounded text-center inline-block mt-1 text-[9px]">
+                                                                    ({bahtText(selectedOrderDetails.total)})
+                                                                </div>
+                                                            </td>
+                                                            <td className="py-1 px-1 text-right">ยอดสุทธิ:</td>
+                                                            <td className="py-1 px-1 text-right text-sm">฿{selectedOrderDetails.total}</td>
+                                                        </tr>
+                                                    </tfoot>
+                                                </table>
                                             </div>
 
-                                            <div className="grid grid-cols-3 gap-4 pt-10 text-center">
-                                                <div className="space-y-6">
+                                            <div className="grid grid-cols-3 gap-4 pt-4 text-center mt-auto">
+                                                <div className="space-y-4">
                                                     <div className="border-b border-dashed border-slate-400 w-4/5 mx-auto"></div>
-                                                    <p className="text-[11px] font-bold">
+                                                    <p className="text-[9px] font-bold">
                                                         {isReceipt ? 'ผู้จ่ายเงิน / ลูกค้า' : 'ผู้รับสินค้า / ลูกค้า'}
                                                         <br/>
-                                                        <span className="text-[10px] text-slate-400 font-normal">วันที่ ...../...../..........</span>
+                                                        <span className="text-[8px] text-slate-400 font-normal">วันที่ ...../...../..........</span>
                                                     </p>
                                                 </div>
-                                                <div className="space-y-6">
+                                                <div className="space-y-4">
                                                     <div className="border-b border-dashed border-slate-400 w-4/5 mx-auto"></div>
-                                                    <p className="text-[11px] font-bold">
+                                                    <p className="text-[9px] font-bold">
                                                         พนักงานจัดส่งสินค้า
                                                         <br/>
-                                                        <span className="text-[10px] text-slate-400 font-normal">วันที่ ...../...../..........</span>
+                                                        <span className="text-[8px] text-slate-400 font-normal">วันที่ ...../...../..........</span>
                                                     </p>
                                                 </div>
-                                                <div className="space-y-6">
+                                                <div className="space-y-4">
                                                     <div className="border-b border-dashed border-slate-400 w-4/5 mx-auto"></div>
-                                                    <p className="text-[11px] font-bold">
+                                                    <p className="text-[9px] font-bold">
                                                         {isReceipt ? 'ผู้รับเงิน / เกื้อบุญฟาร์ม' : 'ผู้ส่งสินค้า / เกื้อบุญฟาร์ม'}
                                                         <br/>
-                                                        <span className="text-[10px] text-slate-400 font-normal">วันที่ ...../...../..........</span>
+                                                        <span className="text-[8px] text-slate-400 font-normal">วันที่ ...../...../..........</span>
                                                     </p>
                                                 </div>
                                             </div>
+                                        </div>
+                                    );
 
+                                    return (
+                                        <div id="printable-area" className="bg-white" style={{ width: '210mm', minHeight: '297mm', margin: '0 auto', padding: '10mm', boxSizing: 'border-box' }}>
+                                            {/* ครึ่งบน: ต้นฉบับ */}
+                                            {docContent(false)}
+
+                                            {/* รอยปรุตัดกระดาษสำหรับหน้าจอมือถือ/เว็บ */}
+                                            <div className="w-full text-center text-slate-400 text-[10px] flex items-center justify-center gap-2 no-print opacity-60" style={{ margin: '4mm 0' }}>
+                                                <span>✂️</span>
+                                                <span className="border-t border-dashed border-slate-400 flex-1"></span>
+                                                <span>พับหรือฉีกตามรอยปรุ</span>
+                                                <span className="border-t border-dashed border-slate-400 flex-1"></span>
+                                                <span>✂️</span>
+                                            </div>
+                                            
+                                            {/* รอยปรุสำหรับแสดงในกระดาษพิมพ์จริง */}
+                                            <div className="hidden print:flex w-full text-center text-slate-500 text-[10px] items-center justify-center gap-2" style={{ margin: '4mm 0' }}>
+                                                <span className="border-t border-dashed border-slate-400 flex-1"></span>
+                                                <span>✂️</span>
+                                                <span className="border-t border-dashed border-slate-400 flex-1"></span>
+                                            </div>
+
+                                            {/* ครึ่งล่าง: สำเนา */}
+                                            {docContent(true)}
+                                            
                                             {!selectedOrderDetails.isBackoffice && (
-                                                <div className="mt-6 p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-amber-900 text-[11px] font-medium flex items-center gap-2">
-                                                    <span className="text-base">📌</span>
+                                                <div className="mt-4 p-2 bg-amber-50/80 border border-amber-200 rounded-lg text-amber-900 text-[9px] font-medium flex items-center justify-center gap-2">
+                                                    <span className="text-xs">📌</span>
                                                     <span><strong>หมายเหตุ:</strong> เอกสารฉบับนี้เป็นเอกสารอิเล็กทรอนิกส์ เอกสารฉบับจริงจะถูกจัดส่งไปพร้อมกับสินค้า</span>
                                                 </div>
                                             )}
